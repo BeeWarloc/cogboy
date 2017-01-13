@@ -1,0 +1,4 @@
+﻿[target.x86_64-pc-windows-msvc.portaudio]
+rustc-link-search = ["bin/x86_64-pc-windows-msvc"]
+rustc-link-lib    = ["portaudio"]
+

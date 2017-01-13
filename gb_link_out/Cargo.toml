@@ -1,0 +1,8 @@
+[package]
+name = "gb_link_out"
+version = "0.1.0"
+authors = ["Karsten Nikolai Strand <karsten@fusetools.com>"]
+
+[dependencies]
+log = "*"
+env_logger = "*"
