@@ -1,13 +1,17 @@
 use std::result;
 use std::thread;
-use std::sync::mpsc::{Receiver, Sender, SendError};
+use std::sync::mpsc::{Receiver, Sender, SendError, RecvError};
+use std::sync::mpsc;
 
 use std::fmt::Write;
 
 use std::thread::JoinHandle;
 use super::ControlMessage;
+use super::command::*;
+use super::Gameboy;
 use gb::cpu;
 use gb::cpu::Cpu;
+
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -15,16 +19,39 @@ use rustyline::Editor;
 use serde_json;
 
 #[derive(Debug)]
+pub struct SystemDebugSummary {
+    regs: cpu::Regs,
+    cycles: u64,
+    rom_bank: u8,
+}
+
+impl SystemDebugSummary {
+    pub fn new(gb: &Gameboy) -> SystemDebugSummary {
+        SystemDebugSummary {
+            regs: gb.cpu.regs.clone(),
+            cycles: gb.cpu.cycles,
+            rom_bank: gb.cpu.bus.cartridge.rom_bank,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum DebugResponse {
-    Regs(cpu::Regs),
+    Summary(SystemDebugSummary),
     Disassembly(String),
-    CpuSnapshot(Cpu),
+    CpuSnapshot(Box<Cpu>),
+    Step(u16),
+    Breakpoints(Vec<u16>),
 }
 
 pub enum DebugRequest {
-    GetRegisters,
-    GetDisassembly,
-    GetCpuSnapshot
+    GetSummary,
+    GetDisassembly(Option<u16>, Option<u16>),
+    GetCpuSnapshot,
+    Step,
+    Continue,
+    AddBreakpoint(u16),
+    ListBreakpoints,
 }
 
 impl DebugRequest {
@@ -46,11 +73,45 @@ impl DebugRequest {
         output
     }
 
-    pub fn invoke(&self, cpu: &mut Cpu) -> DebugResponse {
+    pub fn invoke(&self, gameboy: &mut Gameboy) -> DebugResponse {
         match *self {
-            DebugRequest::GetRegisters => DebugResponse::Regs(cpu.regs.clone()),
-            DebugRequest::GetDisassembly => DebugResponse::Disassembly(DebugRequest::disassemble(cpu, cpu.regs.pc, 10)),
-            DebugRequest::GetCpuSnapshot => DebugResponse::CpuSnapshot(cpu.clone())
+            DebugRequest::GetSummary => {
+                DebugResponse::Summary(SystemDebugSummary::new(gameboy))
+            }
+            DebugRequest::GetDisassembly(addr, len) => {
+                let cpu = &gameboy.cpu;
+                DebugResponse::Disassembly(DebugRequest::disassemble(cpu, addr.unwrap_or(cpu.regs.pc), len.unwrap_or(10)))
+            },
+            DebugRequest::GetCpuSnapshot => DebugResponse::CpuSnapshot(Box::new(gameboy.cpu.clone())),
+            DebugRequest::Step => {
+                // TODO: Better error handling
+                if gameboy.running {
+                    println!("Pausing!");
+                    gameboy.pause();
+                }
+                else
+                {
+                    println!("Stepping!");
+                    let pre_inst_count = gameboy.cpu.instruction_counter;
+                    while pre_inst_count == gameboy.cpu.instruction_counter {
+                        gameboy.cpu.step().unwrap();
+                    }
+                }
+                DebugResponse::Step(gameboy.cpu.regs.pc)
+            }
+            DebugRequest::Continue => {
+                gameboy.play();
+                DebugResponse::Summary(SystemDebugSummary::new(gameboy))
+            },
+            DebugRequest::AddBreakpoint(addr) => {
+                gameboy.breakpoints.insert(addr);
+                let addrs = (&gameboy.breakpoints).into_iter().map(|x| *x).collect();
+                DebugResponse::Breakpoints(addrs)
+            },
+            DebugRequest::ListBreakpoints => {
+                let addrs = (&gameboy.breakpoints).into_iter().map(|x| *x).collect();
+                DebugResponse::Breakpoints(addrs)
+            },
         }
     }
 }
@@ -58,6 +119,7 @@ impl DebugRequest {
 #[derive(Debug)]
 enum Error {
     Send(SendError<ControlMessage>),
+    Receive(RecvError),
     UnexpectedResponse,
 }
 
@@ -65,23 +127,113 @@ type Result<T> = result::Result<T, Error>;
 
 struct Debugger {
     message_tx: Sender<ControlMessage>,
-    response_rx: Receiver<DebugResponse>
+    response_rx: Receiver<DebugResponse>,
+    response_tx: Sender<DebugResponse>,
+    cursor: u16,
+    snapshot: Option<Box<Cpu>>
 }
 
 impl Debugger {
-    pub fn new(message_tx: Sender<ControlMessage>, response_rx: Receiver<DebugResponse>) -> Debugger
+    pub fn new(message_tx: Sender<ControlMessage>) -> Debugger
     {
+        let (response_tx, response_rx) = mpsc::channel();
         Debugger {
             message_tx: message_tx,
-            response_rx: response_rx
+            response_rx: response_rx,
+            response_tx: response_tx,
+            cursor: 0x100,
+            snapshot: None
+        }
+    }
+
+    fn handle_response(&mut self, response: DebugResponse) {
+        match response {
+            DebugResponse::Step(pc) => {
+                self.cursor = pc;
+            }
+            DebugResponse::Summary(summary) => {
+                println!("Regs are {:?}", summary);
+            }
+            DebugResponse::Disassembly(dis) => {
+                println!("{}", dis);
+            }
+            DebugResponse::CpuSnapshot(cpu) => {
+                println!("Received system snapshot");
+                self.snapshot = Some(cpu);
+            }
+            DebugResponse::Breakpoints(ref addresses) => {
+                for addr in addresses {
+                    println!("{:04x}", addr);
+                }
+            }
         }
     }
 
     pub fn send(&mut self, req: DebugRequest) -> Result<DebugResponse> {
-        self.message_tx.send(ControlMessage::Debug(req)).map_err(|err| Error::Send(err));
-        match self.response_rx.recv() {
-            Ok(response) => Ok(response),
-            _ => unimplemented!()
+        self.message_tx
+            .send(ControlMessage::Debug(req, self.response_tx.clone()))
+            .map_err(|err| Error::Send(err))?;
+
+        self.response_rx.recv().map_err(|err| Error::Receive(err))
+    }
+
+    pub fn send_and_handle(&mut self, req: DebugRequest) -> Result<()> {
+        match self.send(req) {
+            Ok(response) => {
+                self.handle_response(response);
+                Ok(())
+            },
+            Err(error) => Err(error)
+        }
+    }
+
+    fn process_command(&mut self, command: Command) {
+        match command {
+            Command::Exit => {
+                self.message_tx.send(ControlMessage::Quit);
+                panic!("TODO: Clean exit")
+            }
+            Command::ShowRegs => {
+                self.send_and_handle(DebugRequest::GetSummary).unwrap()
+            }
+            Command::Disassemble(count) => {
+                let cursor = self.cursor;
+                self.send_and_handle(DebugRequest::GetDisassembly(Some(cursor), Some(count.unwrap_or(10) as u16))).unwrap()
+            }
+            Command::Goto(addr) => {
+                self.cursor = addr as u16;
+            }
+            Command::Step => {
+                self.send_and_handle(DebugRequest::Step).unwrap();
+                self.process_command(Command::Disassemble(None))
+            }
+            Command::Continue => {
+                self.send_and_handle(DebugRequest::Continue).unwrap();
+            }
+            Command::AddBreakpoint(addr) => {
+                self.send_and_handle(DebugRequest::AddBreakpoint(addr as u16)).unwrap();
+            }
+            Command::Breakpoint => {
+                self.send_and_handle(DebugRequest::ListBreakpoints).unwrap();
+            }
+            c => {
+                println!("Unhandled command {:?}", c)
+            }
+        }
+    }
+
+    fn process_debug_line(&mut self, line: &str) {
+        match line.parse() as result::Result<Command, _> {
+            Ok(command) => self.process_command(command),
+            _ => println!("TODO: Err handle match")
+        }
+    }
+
+    pub fn get_summary(&mut self) -> Result<SystemDebugSummary> {
+        match self.send(DebugRequest::GetSummary) {
+            Ok(DebugResponse::Summary(summary)) => Ok(summary),
+            Ok(_) => Err(Error::UnexpectedResponse),
+            Err(err) => Err(err)
         }
     }
 
@@ -93,56 +245,22 @@ impl Debugger {
 
 pub fn start(message_tx: Sender<ControlMessage>, debug_response_rx: Receiver<DebugResponse>) -> JoinHandle<()> {
     let handle = thread::spawn(move || {
-        let mut debugger = Debugger::new(message_tx, debug_response_rx);
+        let mut debugger = Debugger::new(message_tx);
 
         let mut rl = Editor::<()>::new();
         if let Err(_) = rl.load_history("history.txt") {
             println!("No previous history.");
         }
+
         loop {
-            let readline = rl.readline(">> ");
-            match readline {
-                Ok(line) => {
-                    let line = line.trim();
-                    rl.add_history_entry(&line);
-                    println!("Line: {}", line);
-                    match &line as &str {
-                        "pause" => {
-                            debugger.pause();
-                        }
-                        "r" => {
-                            let response = debugger.send(DebugRequest::GetRegisters).unwrap();
-                            if let DebugResponse::Regs(r) = response {
-                                println!("Regs are {:?}", r);
-                            }
-                        }
-                        "d" => {
-                            let response = debugger.send(DebugRequest::GetDisassembly).unwrap();
-                            if let DebugResponse::Disassembly(s) = response {
-                                println!("{}", s);
-                            }
-                        }
-                        "snap" => {
-                            let response = debugger.send(DebugRequest::GetCpuSnapshot).unwrap();
-                            if let DebugResponse::CpuSnapshot(cpu) = response {
-                                println!("Json serialized: \n{}", serde_json::to_string(&cpu).unwrap());
-                            }
-                        }
-                        _ => println!("Unrecognized command {}", line)
-                    };
-                },
-                Err(ReadlineError::Interrupted) => {
-                    println!("CTRL-C");
-                    break
-                },
-                Err(ReadlineError::Eof) => {
-                    println!("CTRL-D");
-                    break
-                },
-                Err(err) => {
-                    println!("Error: {:?}", err);
-                    break
-                }
+            let summary = debugger.get_summary().expect("Unable to get debug summary");
+
+            let prompt = format!("(0x{:04x}) {} >", debugger.cursor, summary.cycles);
+            if let Ok(line) = rl.readline(prompt.as_str()) {
+                rl.add_history_entry(&line);
+                debugger.process_debug_line(line.as_str())
+            } else {
+                break
             }
         }
         rl.save_history("history.txt").unwrap();

@@ -653,6 +653,7 @@ pub struct Cpu {
     // IME
     // TODO: Expose from function instead
     pub cycles: u64,
+    pub instruction_counter: u64,
     interrupts_enabled: bool,
     halted: bool,
     pub regs: Regs,
@@ -685,6 +686,7 @@ impl Cpu {
     pub fn new(rom_file: &str) -> Cpu {
         Cpu {
             cycles: 0,
+            instruction_counter: 0,
             bus: Bus::new(Cartridge::load(rom_file).unwrap()),
             regs: Regs::new(),
             interrupts_enabled: true,
@@ -1332,11 +1334,12 @@ impl Cpu {
                         println!("{}", err);
                         panic!()
                     });
-                trace!("inst: {:?}", instruction);;
+                trace!("inst: {:?}", instruction);
                 let inst_len = instruction.length();
                 self.pc_inc(inst_len as u16);
                 try!(self.execute_instruction(instruction));
                 self.add_cycles(timing as u64);
+                self.instruction_counter += 1;
             } else {
                 self.add_cycles(4);
             }

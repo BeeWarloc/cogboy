@@ -14,7 +14,7 @@ use std::io::Write;
 
 #[derive(Debug,Clone,Serialize,Deserialize)]
 pub struct Bus {
-    cartridge: Cartridge,
+    pub cartridge: Cartridge,
     // TODO: Expose in better way
     pub lcd: Lcd,
     pub sound: Sound,

@@ -8,7 +8,7 @@ use std::io::Read;
 pub struct Cartridge {
     rom: Vec<u8>,
     ram: Vec<u8>,
-    rom_bank: u8,
+    pub rom_bank: u8,
     ram_enabled: bool, // ram_bank: u8
 }
 

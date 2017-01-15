@@ -1,6 +1,7 @@
-#![feature(proc_macro)]
-
 extern crate rustyline;
+
+#[macro_use]
+extern crate nom;
 
 #[macro_use]
 extern crate serde_derive;
@@ -22,10 +23,14 @@ use gb::cpu::Cpu;
 mod audio_driver;
 mod debugger;
 
+mod command;
+
 use std::thread;
 use std::thread::JoinHandle;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
+
+use std::collections::HashSet;
 
 use std::env;
 extern crate minifb;
@@ -52,7 +57,85 @@ pub enum ControlMessage {
     Joypad(u8),
     Play,
     Pause,
-    Debug(debugger::DebugRequest)
+    Debug(debugger::DebugRequest, Sender<debugger::DebugResponse>),
+    Quit
+}
+
+pub struct Gameboy {
+    pub cpu: Cpu,
+    running: bool,
+    message_rx: Receiver<ControlMessage>,
+    snd_tx: Sender<SoundMessage>,
+    gfx_tx: Sender<Vec<u8>>,
+    pending_cycles: i32,
+    breakpoints: std::collections::HashSet<u16>
+}
+
+impl Gameboy {
+    pub fn pause(&mut self) {
+        self.running = false;
+        self.pending_cycles = 0;
+    }
+
+    pub fn play(&mut self) {
+        self.running = true;
+        self.pending_cycles = 0;
+    }
+
+    fn event_loop(&mut self) {
+        loop {
+            let message = self.message_rx.recv().expect("Failed while receiving message");
+            match message {
+                ControlMessage::Tick(cycles) => {
+                    self.pending_cycles += cycles;
+                }
+                ControlMessage::Joypad(buttons) => {
+                    self.cpu.bus.io.joypad_all_buttons = buttons;
+                }
+                ControlMessage::Play => {
+                    self.play();
+                }
+                ControlMessage::Pause =>  {
+                    self.pause();
+                }
+                ControlMessage::Debug(req, response_sender) => {
+                    let resp = req.invoke(self);
+                    response_sender.send(resp).expect("Debug channel closed");
+                }
+                ControlMessage::Quit => break
+            }
+
+            if self.running {
+                while self.pending_cycles > 0 {
+                    let ticks = self.cpu.step().unwrap() as i32;
+                    self.pending_cycles -= ticks;
+                    if self.breakpoints.contains(&self.cpu.regs.pc) {
+                        println!("At breakpoint!");
+                        self.pause();
+                    }
+                    // trace!("Cpu state {}: {:?} IME {} IE {:05b} {:05b}", cpu.cycles, cpu.regs, cpu.interrupts_enabled,
+                    //       cpu.bus.io.interrupt_enable, cpu.bus.io.interrupt_flags );;
+                }
+                let samples = self.cpu.bus.dequeue_samples();
+                self.snd_tx.send(SoundMessage::Buffer(samples)).expect("Sound output channel closed");
+            }
+
+
+            /*
+
+            for s in cpu.bus.dequeue_samples() {
+                let s = ((s as i8) as f32) * u8::max_value() as f32;
+                snd_tx.send(s).unwrap();
+            }*/
+            
+            match self.cpu.bus.lcd.try_get_buffer() {
+                Some(buffer) => {
+                    self.gfx_tx.send(buffer).expect("Graphics output channel closed");
+                }
+                _ => ()
+            }
+        }
+    }
 }
 
 fn start_gameboy(cpu: Cpu, message_rx: Receiver<ControlMessage>, debug_response_tx: Sender<debugger::DebugResponse>) -> GameboyThread {
@@ -61,57 +144,16 @@ fn start_gameboy(cpu: Cpu, message_rx: Receiver<ControlMessage>, debug_response_
     let mut paused = false;
 
     let handle = thread::spawn(move || {
-        let mut cpu = cpu;
-        let mut pending_cycles: i32 = 0;
-        loop {
-            let message = message_rx.recv().expect("Failed while receiving message");
-            match message {
-                ControlMessage::Tick(cycles) => {
-                    pending_cycles += cycles;
-                }
-                ControlMessage::Joypad(buttons) => {
-                    cpu.bus.io.joypad_all_buttons = buttons;
-                }
-                ControlMessage::Play => {
-                    pending_cycles = 0;
-                    paused = false;
-                    snd_tx.send(SoundMessage::Play).unwrap();
-                }
-                ControlMessage::Pause =>  {
-                    pending_cycles = 0;
-                    paused = true;
-                    snd_tx.send(SoundMessage::Pause).unwrap();
-                }
-                ControlMessage::Debug(req) => debug_response_tx.send(req.invoke(&mut cpu)).unwrap(),
-            }
-
-            if paused {
-                continue;
-            }
-
-
-            while pending_cycles > 0 {
-                pending_cycles -= cpu.step().unwrap() as i32;
-                // trace!("Cpu state {}: {:?} IME {} IE {:05b} {:05b}", cpu.cycles, cpu.regs, cpu.interrupts_enabled,
-                //       cpu.bus.io.interrupt_enable, cpu.bus.io.interrupt_flags );;
-            }
-
-            snd_tx.send(SoundMessage::Buffer(cpu.bus.dequeue_samples()))
-                .expect("Sound output channel closed");
-            /*
-
-            for s in cpu.bus.dequeue_samples() {
-                let s = ((s as i8) as f32) * u8::max_value() as f32;
-                snd_tx.send(s).unwrap();
-            }*/
-            
-            match cpu.bus.lcd.try_get_buffer() {
-                Some(buffer) => {
-                    gfx_tx.send(buffer).expect("Graphics output channel closed");
-                }
-                _ => ()
-            }
-        }
+        let mut gameboy = Gameboy {
+            cpu: cpu,
+            running: true,
+            message_rx: message_rx,
+            snd_tx: snd_tx,
+            gfx_tx: gfx_tx,
+            pending_cycles: 0,
+            breakpoints: HashSet::new()
+        };
+        gameboy.event_loop();
     });
 
     GameboyThread {
@@ -192,22 +234,26 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
     let mut paused = true;
 
 
-    while window.is_open() && !window.is_key_down(Key::Escape) {
-
-        // if window.is_key_pressed(Key::O, KeyRepeat::No) {
-        // cpu.bus.dump_audio_buffer("audio.dump");
-        // }
-
+    'outer: while window.is_open() && !window.is_key_down(Key::Escape) {
 
         let mut frame_received = false;
-        while let Ok(source_buffer) = gfx_rx.try_recv() {
-            if frame_received {
-                trace!("Dropped frame");
+        loop {
+            match gfx_rx.try_recv() {
+                Ok(source_buffer) => {
+                    if frame_received {
+                        trace!("Dropped frame");
+                    }
+                    for offset in 0..(LCD_WIDTH * LCD_HEIGHT) {
+                        buffer[offset] = palette[source_buffer[offset] as usize & 0x03];
+                    }
+                    frame_received = true;
+                }
+                Err(mpsc::TryRecvError::Disconnected) =>
+                {
+                    break 'outer;
+                }
+                _ => break
             }
-            for offset in 0..(LCD_WIDTH * LCD_HEIGHT) {
-                buffer[offset] = palette[source_buffer[offset] as usize & 0x03];
-            }
-            frame_received = true;
         }
 
         window.update_with_buffer(&buffer);
@@ -222,6 +268,8 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
         let buttons = map_buttons(&mut window);
         message_tx.send(ControlMessage::Joypad(buttons)).unwrap();
     }
+
+    println!("Exiting window message loop");
 }
 
 fn main() {
@@ -236,12 +284,18 @@ fn main() {
 
     let message_tx_joypad = message_tx.clone();
     let message_tx_debugger = message_tx.clone();
+    let message_tx_audio = message_tx.clone();
 
-    let stream = audio_driver::init(gb_thread.snd_rx, message_tx)
+    let mut stream = audio_driver::init(gb_thread.snd_rx, message_tx_audio)
         .expect("Unable to open audio out stream");
 
     let debugger_handle = debugger::start(message_tx_debugger, debug_response_rx);
     start_window_thread(message_tx_joypad, gb_thread.gfx_rx);
+
+    message_tx.send(ControlMessage::Quit).unwrap();
+
+    stream.close().unwrap();
+    println!("Closed audio stream");
 
     debugger_handle.join().unwrap();
 

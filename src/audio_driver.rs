@@ -7,6 +7,7 @@
 use super::{ControlMessage, SoundMessage};
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use portaudio as pa;
 
@@ -62,9 +63,9 @@ pub fn init(snd_rx: Receiver<SoundMessage>,
     // dynamic resource allocation or IO.
     let callback = move |pa::OutputStreamCallbackArgs { buffer, frames, .. }| {
         let mut state = state.borrow_mut();
-        while let Ok(message) = state.snd_rx.try_recv() {
-            match message {
-                SoundMessage::Buffer(incoming) => {
+        loop {
+            match state.snd_rx.try_recv() {
+                Ok(SoundMessage::Buffer(incoming)) => {
                     for s in incoming {
                         while state.subsample_counter >= 1.0 {
                             state.queue.push_back((s.0 as f32 * (1.0 / 127.0), s.1 as f32 * (1.0 / 127.0)));
@@ -73,8 +74,10 @@ pub fn init(snd_rx: Receiver<SoundMessage>,
                         state.subsample_counter += state.subsample_step;
                     }
                 }
-                SoundMessage::Play => state.paused = false,
-                SoundMessage::Pause => state.paused = true,
+                Ok(SoundMessage::Play) => state.paused = false,
+                Ok(SoundMessage::Pause) => state.paused = true,
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => return pa::Abort,
             }
         }
         if state.queue.len() > 44100 {
