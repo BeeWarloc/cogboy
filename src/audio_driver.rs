@@ -80,8 +80,8 @@ pub fn init(snd_rx: Receiver<SoundMessage>,
                 Err(mpsc::TryRecvError::Disconnected) => return pa::Abort,
             }
         }
-        if state.queue.len() > 44100 {
-            println!("Too much samples!!");
+        while state.queue.len() > 44100 {
+            state.queue.pop_front();
         }
         if state.paused {
             for i in 0..frames {

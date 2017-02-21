@@ -32,6 +32,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use std::collections::HashSet;
 
+use std::cmp;
 use std::env;
 extern crate minifb;
 use minifb::{Key, KeyRepeat, WindowOptions, Window, Scale};
@@ -67,19 +68,20 @@ pub struct Gameboy {
     message_rx: Receiver<ControlMessage>,
     snd_tx: Sender<SoundMessage>,
     gfx_tx: Sender<Vec<u8>>,
-    pending_cycles: i32,
-    breakpoints: std::collections::HashSet<u16>
+    target_cycles: u64,
+    breakpoints: std::collections::HashSet<u16>,
+    break_cycle: u64
 }
 
 impl Gameboy {
     pub fn pause(&mut self) {
         self.running = false;
-        self.pending_cycles = 0;
+        self.target_cycles = self.cpu.cycles;
     }
 
     pub fn play(&mut self) {
         self.running = true;
-        self.pending_cycles = 0;
+        self.target_cycles = self.cpu.cycles;
     }
 
     fn event_loop(&mut self) {
@@ -87,7 +89,7 @@ impl Gameboy {
             let message = self.message_rx.recv().expect("Failed while receiving message");
             match message {
                 ControlMessage::Tick(cycles) => {
-                    self.pending_cycles += cycles;
+                    self.target_cycles += cycles as u64;
                 }
                 ControlMessage::Joypad(buttons) => {
                     self.cpu.bus.io.joypad_all_buttons = buttons;
@@ -106,9 +108,20 @@ impl Gameboy {
             }
 
             if self.running {
-                while self.pending_cycles > 0 {
-                    let ticks = self.cpu.step().unwrap() as i32;
-                    self.pending_cycles -= ticks;
+                let target_cycles =
+                    if self.cpu.cycles > self.break_cycle {
+                        self.target_cycles
+                    } else {
+                        cmp::min(self.target_cycles, self.break_cycle)
+                    };
+
+                while self.cpu.cycles <= target_cycles {
+                    let pre_cycles = self.cpu.cycles;
+                    self.cpu.step().unwrap();
+                    if pre_cycles < self.break_cycle && self.cpu.cycles >= self.break_cycle {
+                        println!("At or passed break cycle {}, breaking at {}", self.break_cycle, self.cpu.cycles);
+                        self.pause();
+                    }
                     if self.breakpoints.contains(&self.cpu.regs.pc) {
                         println!("At breakpoint!");
                         self.pause();
@@ -150,8 +163,9 @@ fn start_gameboy(cpu: Cpu, message_rx: Receiver<ControlMessage>, debug_response_
             message_rx: message_rx,
             snd_tx: snd_tx,
             gfx_tx: gfx_tx,
-            pending_cycles: 0,
-            breakpoints: HashSet::new()
+            target_cycles: 0,
+            breakpoints: HashSet::new(),
+            break_cycle: std::u64::MAX
         };
         gameboy.event_loop();
     });
@@ -275,6 +289,8 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
 fn main() {
     env_logger::init().unwrap();
     let cpu = Cpu::new(&env::args().nth(1).unwrap_or(String::from("rom.gb")));
+
+    println!("sizeof(Cpu) is {}", std::mem::size_of::<Cpu>());
 
 
 

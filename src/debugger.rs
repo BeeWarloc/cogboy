@@ -1,3 +1,4 @@
+use std;
 use std::result;
 use std::thread;
 use std::sync::mpsc::{Receiver, Sender, SendError, RecvError};
@@ -22,6 +23,7 @@ use serde_json;
 pub struct SystemDebugSummary {
     regs: cpu::Regs,
     cycles: u64,
+    break_cycle: u64,
     rom_bank: u8,
 }
 
@@ -31,6 +33,7 @@ impl SystemDebugSummary {
             regs: gb.cpu.regs.clone(),
             cycles: gb.cpu.cycles,
             rom_bank: gb.cpu.bus.cartridge.rom_bank,
+            break_cycle: gb.break_cycle
         }
     }
 }
@@ -50,8 +53,8 @@ pub enum DebugRequest {
     GetCpuSnapshot,
     Step,
     Continue,
-    AddBreakpoint(u16),
-    ListBreakpoints,
+    SetBreakpoints(Vec<Breakpoint>),
+    ListBreakpoints
 }
 
 impl DebugRequest {
@@ -103,8 +106,23 @@ impl DebugRequest {
                 gameboy.play();
                 DebugResponse::Summary(SystemDebugSummary::new(gameboy))
             },
-            DebugRequest::AddBreakpoint(addr) => {
-                gameboy.breakpoints.insert(addr);
+            DebugRequest::SetBreakpoints(ref breakpoints) => {
+                gameboy.breakpoints.clear();
+                gameboy.break_cycle = std::u64::MAX;
+
+                for bp in breakpoints {
+                    match *bp {
+                        Breakpoint::Code(addr) => {
+                            gameboy.breakpoints.insert(addr);
+                        }
+                        Breakpoint::Cycle(cycle) => {
+                            if gameboy.break_cycle != std::u64::MAX {
+                                panic!("TODO: Only one break cycle supported for now")
+                            }
+                            gameboy.break_cycle = cycle;
+                        }
+                    }
+                }
                 let addrs = (&gameboy.breakpoints).into_iter().map(|x| *x).collect();
                 DebugResponse::Breakpoints(addrs)
             },
@@ -130,6 +148,7 @@ struct Debugger {
     response_rx: Receiver<DebugResponse>,
     response_tx: Sender<DebugResponse>,
     cursor: u16,
+    breakpoints: Vec<Breakpoint>,
     snapshot: Option<Box<Cpu>>
 }
 
@@ -141,6 +160,7 @@ impl Debugger {
             message_tx: message_tx,
             response_rx: response_rx,
             response_tx: response_tx,
+            breakpoints: Vec::new(),
             cursor: 0x100,
             snapshot: None
         }
@@ -210,11 +230,16 @@ impl Debugger {
             Command::Continue => {
                 self.send_and_handle(DebugRequest::Continue).unwrap();
             }
-            Command::AddBreakpoint(addr) => {
-                self.send_and_handle(DebugRequest::AddBreakpoint(addr as u16)).unwrap();
+            Command::AddBreakpoint(bp) => {
+                self.breakpoints.push(bp);
+                let breakpoints_cloned = self.breakpoints.clone();
+                self.send_and_handle(DebugRequest::SetBreakpoints(breakpoints_cloned)).unwrap();
             }
-            Command::Breakpoint => {
-                self.send_and_handle(DebugRequest::ListBreakpoints).unwrap();
+            Command::ListBreakpoints => {
+                for bp in self.breakpoints.as_slice() {
+                    // TODO: Proper printing of breakpoints
+                    println!("{:?}", bp);
+                }
             }
             c => {
                 println!("Unhandled command {:?}", c)

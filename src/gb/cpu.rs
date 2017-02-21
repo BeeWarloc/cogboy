@@ -1303,7 +1303,7 @@ impl Cpu {
         }
     }
 
-    pub fn step(&mut self) -> Result<usize, &'static str> {
+    pub fn step(&mut self) -> Result<(), &'static str> {
         let pre_cycles = self.cycles;
 
         let mut interrupt_called = false;
@@ -1354,6 +1354,6 @@ impl Cpu {
             self.halted = false;
         }
 
-        Ok(passed_cycles)
+        Ok(())
     }
 }

@@ -3,6 +3,13 @@ use nom::{IResult, eof, space, digit, hex_digit, alphanumeric};
 use std::str::{self, FromStr};
 use std::borrow::Cow;
 
+#[derive(Debug,Clone,Copy)]
+pub enum Breakpoint
+{
+    Code(u16),
+    Cycle(u64)
+}
+
 #[derive(Debug, Clone)]
 pub enum Command {
     ShowRegs,
@@ -14,9 +21,9 @@ pub enum Command {
     Label,
     AddLabel(String, u32),
     RemoveLabel(String),
-    Breakpoint,
-    AddBreakpoint(u32),
-    RemoveBreakpoint(u32),
+    ListBreakpoints,
+    AddBreakpoint(Breakpoint),
+    RemoveBreakpoint(Breakpoint),
     Watchpoint,
     AddWatchpoint(u32),
     RemoveWatchpoint(u32),
@@ -94,6 +101,14 @@ named!(
     |s| u32::from_str_radix(s, 16)));
 
 named!(
+    hex_u16_parser<u16>,
+    map_res!(
+        map_res!(
+            preceded!(opt!(alt_complete!(tag!("0x") | tag!("$"))), hex_digit),
+            str::from_utf8),
+    |s| u16::from_str_radix(s, 16)));
+
+named!(
     disassemble<Command>,
     chain!(
         alt_complete!(tag!("disassemble") | tag!("d")) ~
@@ -102,6 +117,14 @@ named!(
 
 named!(
     usize_parser<usize>,
+    map_res!(
+        map_res!(
+            digit,
+            str::from_utf8),
+    FromStr::from_str));
+
+named!(
+    u64_dec_parser<u64>,
     map_res!(
         map_res!(
             digit,
@@ -143,17 +166,33 @@ named!(
     || Command::RemoveLabel(name)));
 
 named!(
+    breakpoint_code_type_parser<Breakpoint>,
+    chain!(
+        addr: hex_u16_parser,
+    || Breakpoint::Code(addr)));
+
+named!(
+    breakpoint_cycle_type_parser<Breakpoint>,
+    chain!(
+        cycle: preceded!(tag!("@"), u64_dec_parser),
+    || Breakpoint::Cycle(cycle)));
+
+named!(
+   breakpoint_parser<Breakpoint>,
+   alt_complete!(breakpoint_code_type_parser | breakpoint_cycle_type_parser));
+
+named!(
     breakpoint<Command>,
     map!(
         alt_complete!(tag!("breakpoint") | tag!("b")),
-    |_| Command::Breakpoint));
+    |_| Command::ListBreakpoints));
 
 named!(
     add_breakpoint<Command>,
     chain!(
         alt_complete!(tag!("addbreakpoint") | tag!("ab")) ~
         space ~
-        addr: hex_u32_parser,
+        addr: breakpoint_parser,
     || Command::AddBreakpoint(addr)));
 
 named!(
@@ -161,7 +200,7 @@ named!(
     chain!(
         alt_complete!(tag!("removebreakpoint") | tag!("rb")) ~
         space ~
-        addr: hex_u32_parser,
+        addr: breakpoint_parser,
     || Command::RemoveBreakpoint(addr)));
 
 named!(
