@@ -31,6 +31,7 @@ use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
 use std::collections::HashSet;
+use std::collections::VecDeque;
 
 use std::cmp;
 use std::env;
@@ -56,14 +57,24 @@ pub enum SoundMessage {
 pub enum ControlMessage {
     Tick(i32),
     Joypad(u8),
+    ToggleSpeedLimit,
     Play,
     Pause,
     Debug(debugger::DebugRequest, Sender<debugger::DebugResponse>),
     Quit
 }
 
+#[derive(Clone,Copy,Debug)]
+pub struct EventEntry {
+    time: u64,
+    joypad: u8
+}
+
 pub struct Gameboy {
     pub cpu: Cpu,
+    passed_events: Vec<EventEntry>,
+    pending_events: VecDeque<EventEntry>,
+    limit_speed: bool,
     running: bool,
     message_rx: Receiver<ControlMessage>,
     snd_tx: Sender<SoundMessage>,
@@ -86,13 +97,28 @@ impl Gameboy {
 
     fn event_loop(&mut self) {
         loop {
-            let message = self.message_rx.recv().expect("Failed while receiving message");
+            let message =
+                if self.limit_speed {
+                    self.message_rx.recv().expect("Failed while receiving message")
+                } else {
+                    self.message_rx.try_recv().unwrap_or(ControlMessage::Tick(9000))
+                };
+
             match message {
                 ControlMessage::Tick(cycles) => {
                     self.target_cycles += cycles as u64;
                 }
                 ControlMessage::Joypad(buttons) => {
-                    self.cpu.bus.io.joypad_all_buttons = buttons;
+                    if self.cpu.bus.io.joypad_all_buttons != buttons {
+                        if self.pending_events.len() > 0 {
+                            println!("Overriding pending events!");
+                            self.pending_events.clear();
+                        }
+                        self.pending_events.push_front(EventEntry { time: self.cpu.cycles, joypad: buttons });
+                    }
+                }
+                ControlMessage::ToggleSpeedLimit => {
+                    self.limit_speed = !self.limit_speed;
                 }
                 ControlMessage::Play => {
                     self.play();
@@ -115,22 +141,40 @@ impl Gameboy {
                         cmp::min(self.target_cycles, self.break_cycle)
                     };
 
-                while self.cpu.cycles <= target_cycles {
-                    let pre_cycles = self.cpu.cycles;
-                    self.cpu.step().unwrap();
-                    if pre_cycles < self.break_cycle && self.cpu.cycles >= self.break_cycle {
-                        println!("At or passed break cycle {}, breaking at {}", self.break_cycle, self.cpu.cycles);
-                        self.pause();
+                while self.running && self.cpu.cycles <= target_cycles {
+                    while let Some(ev) = self.pending_events.pop_front() {
+                        if ev.time > self.cpu.cycles {
+                            self.pending_events.push_front(ev);
+                            break;
+                        }
+                        self.cpu.bus.io.joypad_all_buttons = ev.joypad;
+                        self.passed_events.push(ev);
                     }
-                    if self.breakpoints.contains(&self.cpu.regs.pc) {
-                        println!("At breakpoint!");
-                        self.pause();
+
+                    let next_event_cycle = cmp::min(target_cycles, self.pending_events.front().map(|ev| ev.time).unwrap_or(std::u64::MAX));
+
+                    while self.cpu.cycles <= next_event_cycle {
+                        let pre_cycles = self.cpu.cycles;
+                        self.cpu.step().unwrap();
+                        if pre_cycles < self.break_cycle && self.cpu.cycles >= self.break_cycle {
+                            println!("At or passed break cycle {}, breaking at {}", self.break_cycle, self.cpu.cycles);
+                            self.pause();
+                            break;
+                        }
+                        if self.breakpoints.contains(&self.cpu.regs.pc) {
+                            println!("At breakpoint!");
+                            self.pause();
+                            break;
+                        }
                     }
                     // trace!("Cpu state {}: {:?} IME {} IE {:05b} {:05b}", cpu.cycles, cpu.regs, cpu.interrupts_enabled,
                     //       cpu.bus.io.interrupt_enable, cpu.bus.io.interrupt_flags );;
                 }
                 let samples = self.cpu.bus.dequeue_samples();
-                self.snd_tx.send(SoundMessage::Buffer(samples)).expect("Sound output channel closed");
+
+                if self.limit_speed {
+                    self.snd_tx.send(SoundMessage::Buffer(samples)).expect("Sound output channel closed");
+                }
             }
 
 
@@ -159,7 +203,10 @@ fn start_gameboy(cpu: Cpu, message_rx: Receiver<ControlMessage>, debug_response_
     let handle = thread::spawn(move || {
         let mut gameboy = Gameboy {
             cpu: cpu,
+            passed_events: Vec::new(),
+            pending_events: VecDeque::new(),
             running: true,
+            limit_speed: true,
             message_rx: message_rx,
             snd_tx: snd_tx,
             gfx_tx: gfx_tx,
@@ -246,7 +293,7 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
     // });
     //
     let mut paused = true;
-
+    let mut last_buttons = 0xffu8;
 
     'outer: while window.is_open() && !window.is_key_down(Key::Escape) {
 
@@ -278,9 +325,16 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
             continue;
         }
 
+        if window.is_key_pressed(Key::Q, KeyRepeat::No) {
+            message_tx.send(ControlMessage::ToggleSpeedLimit).unwrap();
+        }
+
 
         let buttons = map_buttons(&mut window);
-        message_tx.send(ControlMessage::Joypad(buttons)).unwrap();
+        if last_buttons != buttons {
+            message_tx.send(ControlMessage::Joypad(buttons)).unwrap();
+            last_buttons = buttons;
+        }
     }
 
     println!("Exiting window message loop");
@@ -316,6 +370,4 @@ fn main() {
     debugger_handle.join().unwrap();
 
     // let mut buffer: Vec<u32> = vec![0; 160 * 144];
-
-
 }

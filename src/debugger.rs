@@ -10,6 +10,7 @@ use std::thread::JoinHandle;
 use super::ControlMessage;
 use super::command::*;
 use super::Gameboy;
+use super::EventEntry;
 use gb::cpu;
 use gb::cpu::Cpu;
 
@@ -51,6 +52,7 @@ pub enum DebugRequest {
     GetSummary,
     GetDisassembly(Option<u16>, Option<u16>),
     GetCpuSnapshot,
+    SetCpuSnapshot(Box<Cpu>),
     Step,
     Continue,
     SetBreakpoints(Vec<Breakpoint>),
@@ -86,6 +88,20 @@ impl DebugRequest {
                 DebugResponse::Disassembly(DebugRequest::disassemble(cpu, addr.unwrap_or(cpu.regs.pc), len.unwrap_or(10)))
             },
             DebugRequest::GetCpuSnapshot => DebugResponse::CpuSnapshot(Box::new(gameboy.cpu.clone())),
+            DebugRequest::SetCpuSnapshot(ref cpu) => {
+                gameboy.cpu.clone_from(cpu);
+                gameboy.target_cycles = gameboy.cpu.cycles;
+                while let Some(ev) = gameboy.passed_events.pop() {
+                    if ev.time > gameboy.cpu.cycles {
+                        gameboy.pending_events.push_front(ev);
+                    }
+                    else {
+                        gameboy.passed_events.push(ev);
+                        break;
+                    }
+                }
+                DebugResponse::Summary(SystemDebugSummary::new(gameboy))
+            }
             DebugRequest::Step => {
                 // TODO: Better error handling
                 if gameboy.running {
@@ -149,7 +165,7 @@ struct Debugger {
     response_tx: Sender<DebugResponse>,
     cursor: u16,
     breakpoints: Vec<Breakpoint>,
-    snapshot: Option<Box<Cpu>>
+    snapshot: Option<Box<Cpu, >>
 }
 
 impl Debugger {
@@ -213,6 +229,17 @@ impl Debugger {
                 self.message_tx.send(ControlMessage::Quit);
                 panic!("TODO: Clean exit")
             }
+            Command::Save => {
+                self.send_and_handle(DebugRequest::GetCpuSnapshot).unwrap()
+            }
+            Command::Load => {
+                let maybe_snap = self.snapshot.clone();
+                if let Some(cpu_snapshot) = maybe_snap {
+                    self.send_and_handle(DebugRequest::SetCpuSnapshot(cpu_snapshot)).unwrap()
+                } else {
+                    println!("No snapshot to load");
+                }
+            }
             Command::ShowRegs => {
                 self.send_and_handle(DebugRequest::GetSummary).unwrap()
             }
@@ -250,7 +277,7 @@ impl Debugger {
     fn process_debug_line(&mut self, line: &str) {
         match line.parse() as result::Result<Command, _> {
             Ok(command) => self.process_command(command),
-            _ => println!("TODO: Err handle match")
+            Err(err) => println!("TODO: Err handle match {}", err)
         }
     }
 

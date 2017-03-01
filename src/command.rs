@@ -27,6 +27,9 @@ pub enum Command {
     Watchpoint,
     AddWatchpoint(u32),
     RemoveWatchpoint(u32),
+    Save,
+    Load,
+
     Exit,
     Repeat,
 }
@@ -47,6 +50,8 @@ named!(
     complete!(
         terminated!(
         alt_complete!(
+            save_state |
+            load_state |
             step |
             continue_ |
             goto |
@@ -237,6 +242,17 @@ named!(
         alt_complete!(tag!("showregs") | tag!("r")),
     |_| Command::ShowRegs));
 
+named!(
+    save_state<Command>,
+    map!(
+        alt_complete!(tag!("save")),
+    |_| Command::Save));
+
+named!(
+    load_state<Command>,
+    map!(
+        alt_complete!(tag!("load")),
+    |_| Command::Load));
 named!(
     repeat<Command>,
     value!(Command::Repeat));
