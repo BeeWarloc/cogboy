@@ -6,6 +6,10 @@ use std::sync::mpsc;
 
 use std::fmt::Write;
 
+use std::fs::File;
+use std::io::Read;
+use std::io::Write as IoWrite;
+
 use std::thread::JoinHandle;
 use super::ControlMessage;
 use super::command::*;
@@ -165,20 +169,24 @@ struct Debugger {
     response_tx: Sender<DebugResponse>,
     cursor: u16,
     breakpoints: Vec<Breakpoint>,
-    snapshot: Option<Box<Cpu, >>
+    snapshot: Option<Box<Cpu>>
 }
 
 impl Debugger {
     pub fn new(message_tx: Sender<ControlMessage>) -> Debugger
     {
         let (response_tx, response_rx) = mpsc::channel();
+        let snapshot: Option<Box<Cpu>> = File::open("gameboy.state")
+                        .ok()
+                        .map(|f| serde_json::from_reader(f).ok())
+                        .unwrap_or(None);
         Debugger {
             message_tx: message_tx,
             response_rx: response_rx,
             response_tx: response_tx,
             breakpoints: Vec::new(),
             cursor: 0x100,
-            snapshot: None
+            snapshot: snapshot
         }
     }
 
@@ -195,6 +203,11 @@ impl Debugger {
             }
             DebugResponse::CpuSnapshot(cpu) => {
                 println!("Received system snapshot");
+                if let Ok(mut f) = File::create("gameboy.state") {
+                    if let Ok(serialized) = serde_json::to_vec(&cpu) {
+                        f.write(serialized.as_slice());
+                    }
+                }
                 self.snapshot = Some(cpu);
             }
             DebugResponse::Breakpoints(ref addresses) => {
