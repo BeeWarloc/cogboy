@@ -95,7 +95,7 @@ const CPU_FLAG_H: u8 = 0x20;
 const CPU_FLAG_C: u8 = 0x10;
 
 #[derive(Debug, Clone, Copy)]
-enum OpcodeOperand16 {
+pub enum OpcodeOperand16 {
     BC,
     DE,
     HL,
@@ -134,7 +134,7 @@ impl OpcodeOperand16 {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum OpcodeOperand8 {
+pub enum OpcodeOperand8 {
     A,
     B,
     C,
@@ -223,7 +223,7 @@ impl OpcodeRegister16 {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum OpcodeCondition {
+pub enum OpcodeCondition {
     None,
     Z,
     Nz,

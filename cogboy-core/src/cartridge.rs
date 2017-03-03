@@ -1,12 +1,13 @@
 use std;
 use std::io;
+use std::sync::Arc;
 
 use std::fs::File;
 use std::io::Read;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cartridge {
-    rom: Vec<u8>,
+    rom: Arc<Vec<u8>>,
     ram: Vec<u8>,
     pub rom_bank: u8,
     ram_enabled: bool, // ram_bank: u8
@@ -43,7 +44,7 @@ impl Cartridge {
         let header = RomHeader::new(&rom);
 
         let cart = Cartridge {
-            rom: rom,
+            rom: Arc::new(rom),
             rom_bank: 1,
             ram: vec![0; header.ram_size],
             ram_enabled: false,

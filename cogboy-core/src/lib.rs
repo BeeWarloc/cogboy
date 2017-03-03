@@ -1,8 +1,75 @@
+#[macro_use]
+extern crate serde_derive;
+
+#[macro_use]
+extern crate log;
+
+#[macro_use]
+extern crate enum_primitive;
+extern crate num;
+
+use std::cmp;
+use std::collections::VecDeque;
+
 pub mod cpu;
 pub mod bus;
 pub mod cartridge;
 pub mod sound;
 pub mod lcd;
+
+use self::cpu::Cpu;
+
+#[derive(Clone,Copy,Debug)]
+pub struct EventEntry {
+    time: u64,
+    joypad: u8
+}
+
+pub struct System {
+    pub cpu: Box<Cpu>,
+    passed_events: Vec<EventEntry>,
+    pending_events: VecDeque<EventEntry>,
+}
+
+impl System {
+    fn run_to_cycle(&mut self, target_cycles: u64) {
+        if self.cpu.cycles > target_cycles {
+            panic!("Rewinding not yet supported");
+        }
+        while self.cpu.cycles <= target_cycles {
+            while let Some(ev) = self.pending_events.pop_front() {
+                if ev.time > self.cpu.cycles {
+                    self.pending_events.push_front(ev);
+                    break;
+                }
+                self.cpu.bus.io.joypad_all_buttons = ev.joypad; 
+                self.passed_events.push(ev);
+            }
+
+            let next_event_cycle = cmp::min(target_cycles, self.pending_events.front().map(|ev| ev.time).unwrap_or(std::u64::MAX));
+
+            while self.cpu.cycles <= next_event_cycle {  
+                let pre_cycles = self.cpu.cycles;
+                self.cpu.step().unwrap();
+
+                /*
+                if pre_cycles < self.break_cycle && self.cpu.cycles >= self.break_cycle {
+                    println!("At or passed break cycle {}, breaking at {}", self.break_cycle, self.cpu.cycles);
+                    self.pause();
+                    break;
+                }
+                if self.breakpoints.contains(&self.cpu.regs.pc) {
+                    println!("At breakpoint!");
+                    self.pause();
+                    break;
+                }
+                */
+            }
+            // trace!("Cpu state {}: {:?} IME {} IE {:05b} {:05b}", cpu.cycles, cpu.regs, cpu.interrupts_enabled,
+            //       cpu.bus.io.interrupt_enable, cpu.bus.io.interrupt_flags );;
+        }
+    }
+}
 
 pub mod constants {
     pub const MEM_CARTRIDGE_ROM_START: u16 = 0x0000;
@@ -55,6 +122,5 @@ pub mod constants {
     pub const INT_MASK_SERIAL: u8 = 1u8 << INT_SERIAL;
     pub const INT_JOYPAD: usize = 4;
     pub const INT_MASK_JOYPAD: u8 = 1u8 << INT_JOYPAD;
-
 }
 

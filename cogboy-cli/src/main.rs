@@ -16,9 +16,9 @@ extern crate num;
 extern crate log;
 extern crate env_logger;
 
+extern crate cogboy_core;
 
-mod gb;
-use gb::cpu::Cpu;
+use cogboy_core::cpu::Cpu;
 
 mod audio_driver;
 mod debugger;

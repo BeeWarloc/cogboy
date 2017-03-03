@@ -1,9 +1,10 @@
 [package]
-name = "cogboy"
+name = "cogboy-cli"
 version = "0.1.0"
 authors = ["BeeWarloc"]
 
 [dependencies]
+cogboy-core = { path = "../cogboy-core" }
 enum_primitive = "*"
 num = "*"
 log = "*"
@@ -11,11 +12,8 @@ env_logger = "*"
 minifb = "*"
 portaudio = "0.7.0"
 rustyline = "1.0.0"
-serde = "0.8"
-serde_derive = "0.8"
-serde_json = "0.8"
+serde = "0.9"
+serde_derive = "0.9"
+serde_json = "0.9"
 nom = "^1.2.3"
-
-[profile.release]
-#debug-assertions = true # controls whether debug assertions are enabled
 

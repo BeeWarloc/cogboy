@@ -15,8 +15,8 @@ use super::ControlMessage;
 use super::command::*;
 use super::Gameboy;
 use super::EventEntry;
-use gb::cpu;
-use gb::cpu::Cpu;
+use cogboy_core::cpu;
+use cogboy_core::cpu::Cpu;
 
 
 use rustyline::error::ReadlineError;
