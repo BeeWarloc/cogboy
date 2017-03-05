@@ -18,6 +18,7 @@ pub mod sound;
 pub mod lcd;
 
 use self::cpu::Cpu;
+use self::bus::Bus;
 
 #[derive(Clone,Copy,Debug)]
 pub struct EventEntry {
@@ -25,6 +26,7 @@ pub struct EventEntry {
     joypad: u8
 }
 
+#[derive(Clone)]
 pub struct System {
     pub cpu: Box<Cpu>,
     passed_events: Vec<EventEntry>,
@@ -32,7 +34,20 @@ pub struct System {
 }
 
 impl System {
-    fn run_to_cycle(&mut self, target_cycles: u64) {
+    pub fn new(path: &str) -> System {
+        System {
+            cpu: Box::new(Cpu::new(path)),
+            passed_events: Vec::new(),
+            pending_events: VecDeque::new()
+        }
+    }
+
+    pub fn drain_serial_out(&mut self) -> String {
+        let q: &mut VecDeque<u8> = &mut self.cpu.bus.io.serial_out;
+        q.iter().map(|x| *x as char).collect::<String>()
+    }
+
+    pub fn run_to_cycle(&mut self, target_cycles: u64) {
         if self.cpu.cycles > target_cycles {
             panic!("Rewinding not yet supported");
         }

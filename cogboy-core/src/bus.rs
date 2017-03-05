@@ -7,6 +7,7 @@ use super::constants::*;
 
 use num::FromPrimitive;
 use std::io;
+use std::collections::VecDeque;
 
 use std::fs::File;
 use std::io::Write;
@@ -133,6 +134,8 @@ pub struct IoPorts {
     pub interrupt_flags: u8,
 
     pub joypad_all_buttons: u8,
+
+    pub serial_out: VecDeque<u8>,
 }
 
 impl IoPorts {
@@ -145,6 +148,7 @@ impl IoPorts {
             interrupt_enable: 0,
             interrupt_flags: 0,
             joypad_all_buttons: 0xff,
+            serial_out: VecDeque::new()
         }
     }
 
@@ -159,6 +163,7 @@ impl IoPorts {
                     IoAddress::Sb => self.serial_data = value,
                     IoAddress::Sc => {
                         if value & 0x80 == 0x80 {
+                            self.serial_out.push_back(self.serial_data);
                             print!("{}", (self.serial_data as char).to_string());
                         }
                     }
