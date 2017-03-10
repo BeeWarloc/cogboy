@@ -43,8 +43,7 @@ impl System {
     }
 
     pub fn drain_serial_out(&mut self) -> String {
-        let q: &mut VecDeque<u8> = &mut self.cpu.bus.io.serial_out;
-        q.iter().map(|x| *x as char).collect::<String>()
+        self.cpu.bus.io.serial_out.drain(..).map(|x| x as char).collect::<String>()
     }
 
     pub fn run_to_cycle(&mut self, target_cycles: u64) {

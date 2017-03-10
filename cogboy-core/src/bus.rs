@@ -164,7 +164,6 @@ impl IoPorts {
                     IoAddress::Sc => {
                         if value & 0x80 == 0x80 {
                             self.serial_out.push_back(self.serial_data);
-                            print!("{}", (self.serial_data as char).to_string());
                         }
                     }
                     IoAddress::Div => self.timers.write_div(),
