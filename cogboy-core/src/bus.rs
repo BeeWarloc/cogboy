@@ -254,7 +254,7 @@ impl Bus {
             MEM_LCD_OAM_START...MEM_LCD_OAM_END => self.lcd.read(addr),
             0xff10...0xff27 => self.sound.read(addr),
             MEM_LCD_IO_START...MEM_LCD_IO_END => self.lcd.read(addr),
-            0xff00...0xff09 | 0xff28...0xff7f | 0xffff => self.io.read(addr),
+            0xff00...0xff0f | 0xff28...0xff7f | 0xffff => self.io.read(addr),
             0xff80...0xfffe => self.hram[(addr - 0xff80) as usize],
             _ => {
                 trace!("Reading unmapped {:x}, just returning 0xff", addr);
@@ -293,7 +293,7 @@ impl Bus {
             MEM_LCD_OAM_START...MEM_LCD_OAM_END => self.lcd.write(addr, value),
             0xff10...0xff27 => self.sound.write(addr, value),
             MEM_LCD_IO_START...MEM_LCD_IO_END => self.lcd.write(addr, value),
-            0xff00...0xff09 | 0xff28...0xff7f | 0xffff => self.io.write(addr, value),
+            0xff00...0xff0f | 0xff28...0xff7f | 0xffff => self.io.write(addr, value),
             0xff80...0xfffe => self.hram[(addr - 0xff80) as usize] = value,
             _ => trace!("NOT MAPPED FOR WRITE {:x} (value 0b{:05b})", addr, value),
         }
