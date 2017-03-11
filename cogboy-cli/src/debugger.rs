@@ -30,6 +30,9 @@ pub struct SystemDebugSummary {
     cycles: u64,
     break_cycle: u64,
     rom_bank: u8,
+    interrupt_flags: u8,
+    interrupt_enable: u8,
+    ime: bool
 }
 
 impl SystemDebugSummary {
@@ -38,7 +41,10 @@ impl SystemDebugSummary {
             regs: gb.cpu.regs.clone(),
             cycles: gb.cpu.cycles,
             rom_bank: gb.cpu.bus.cartridge.rom_bank,
-            break_cycle: gb.break_cycle
+            break_cycle: gb.break_cycle,
+            interrupt_flags: gb.cpu.bus.io.interrupt_flags,
+            interrupt_enable: gb.cpu.bus.io.interrupt_enable,
+            ime: gb.cpu.interrupts_enabled
         }
     }
 }

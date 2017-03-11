@@ -654,10 +654,11 @@ pub struct Cpu {
     // TODO: Expose from function instead
     pub cycles: u64,
     pub instruction_counter: u64,
-    interrupts_enabled: bool,
+    pub interrupts_enabled: bool,
     halted: bool,
     pub regs: Regs,
     pub bus: Bus,
+    pub break_me: bool
 }
 
 static INST_TIMINGS: [u8; 256] =
@@ -691,6 +692,7 @@ impl Cpu {
             regs: Regs::new(),
             interrupts_enabled: true,
             halted: false,
+            break_me: false
         }
     }
 
@@ -1057,6 +1059,7 @@ impl Cpu {
             }
             Instruction::Ei => {
                 self.interrupts_enabled = true;
+                self.break_me = true;
                 Ok(())
             }
             Instruction::Adc(_, r) => {

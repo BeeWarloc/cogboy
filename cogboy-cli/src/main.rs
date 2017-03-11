@@ -156,6 +156,11 @@ impl Gameboy {
                     while self.cpu.cycles <= next_event_cycle {
                         let pre_cycles = self.cpu.cycles;
                         self.cpu.step().unwrap();
+                        if self.cpu.break_me {
+                            self.cpu.break_me = false;
+                            self.pause();
+                            break;
+                        }
                         if pre_cycles < self.break_cycle && self.cpu.cycles >= self.break_cycle {
                             println!("At or passed break cycle {}, breaking at {}", self.break_cycle, self.cpu.cycles);
                             self.pause();
@@ -342,7 +347,8 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
 
 fn main() {
     env_logger::init().unwrap();
-    let cpu = Cpu::new(&env::args().nth(1).unwrap_or(String::from("rom.gb")));
+    let mut cpu = Cpu::new(&env::args().nth(1).unwrap_or(String::from("rom.gb")));
+    cpu.break_me = true;
 
     println!("sizeof(Cpu) is {}", std::mem::size_of::<Cpu>());
 
