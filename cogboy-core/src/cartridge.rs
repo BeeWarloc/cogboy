@@ -5,8 +5,27 @@ use std::sync::Arc;
 use std::fs::File;
 use std::io::Read;
 
+use serde::{Serialize,Serializer,Deserialize,Deserializer};
+
+fn serialize_arc<T,S>(val: &Arc<T>, serializer: S) -> Result<S::Ok, S::Error>
+                                        where S : Serializer,
+                                              T : Serialize
+{
+    val.serialize(serializer)
+}
+
+fn deserialize_arc<'de,T,D>(deserializer: D) -> Result<Arc<T>, D::Error>
+                                        where D : Deserializer<'de>,
+                                              T : Deserialize<'de>, 
+{
+    let inner: T = T::deserialize(deserializer)?;
+    Ok(Arc::new(inner))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cartridge {
+    #[serde(serialize_with = "serialize_arc")]
+    #[serde(deserialize_with = "deserialize_arc")]
     rom: Arc<Vec<u8>>,
     ram: Vec<u8>,
     pub rom_bank: u8,

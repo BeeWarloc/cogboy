@@ -1,12 +1,12 @@
 [package]
 name = "cogboy-core"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["BeeWarloc"]
 
 [dependencies]
 enum_primitive = "*"
 num = "*"
 log = "*"
-serde = "0.9"
-serde_derive = "0.9"
+serde = "1.0"
+serde_derive = "1.0"
 
