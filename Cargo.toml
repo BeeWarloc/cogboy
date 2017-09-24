@@ -1,0 +1,2 @@
+﻿[workspace]
+members = ["cogboy-cli", "cogboy-core"]
