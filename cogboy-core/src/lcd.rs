@@ -122,7 +122,7 @@ impl Lcd {
     pub fn write(&mut self, addr: u16, value: u8) {
         match addr {
             MEM_LCD_IO_LCDC => self.lcdc = value,
-            MEM_LCD_IO_STAT => self.stat = value | (self.stat & 0b1111000),
+            MEM_LCD_IO_STAT => self.stat = (value & 0b1111000) | (self.stat & 0b111),
             MEM_LCD_IO_SCY => self.scy = value,
             MEM_LCD_IO_SCX => self.scx = value,
             MEM_LCD_IO_LY => self.ly = 0, // LY (writing will reset the counter)
