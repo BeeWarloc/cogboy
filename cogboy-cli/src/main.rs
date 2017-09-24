@@ -60,6 +60,7 @@ pub enum ControlMessage {
     ToggleSpeedLimit,
     Play,
     Pause,
+    Replay,
     Debug(debugger::DebugRequest, Sender<debugger::DebugResponse>),
     Quit
 }
@@ -95,6 +96,16 @@ impl Gameboy {
         self.target_cycles = self.cpu.cycles;
     }
 
+    fn replay(&mut self) {
+        self.cpu.reset();
+        self.pending_events.clear();
+        for ev in self.passed_events.iter() {
+            self.pending_events.push_back(*ev);
+        }
+        self.passed_events.clear();
+        self.target_cycles = self.cpu.cycles;
+    }
+
     fn event_loop(&mut self) {
         loop {
             let message =
@@ -123,8 +134,11 @@ impl Gameboy {
                 ControlMessage::Play => {
                     self.play();
                 }
-                ControlMessage::Pause =>  {
+                ControlMessage::Pause => {
                     self.pause();
+                }
+                ControlMessage::Replay => {
+                    self.replay();
                 }
                 ControlMessage::Debug(req, response_sender) => {
                     let resp = req.invoke(self);
@@ -323,6 +337,10 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
             message_tx.send(if paused { ControlMessage::Play } else { ControlMessage::Pause }).unwrap();
             paused = !paused;
             continue;
+        }
+
+        if window.is_key_pressed(Key::R, KeyRepeat::No) {
+            message_tx.send(ControlMessage::Replay).unwrap();
         }
 
         if window.is_key_pressed(Key::Q, KeyRepeat::No) {

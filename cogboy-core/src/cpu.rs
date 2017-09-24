@@ -694,6 +694,18 @@ impl Cpu {
         }
     }
 
+    pub fn reset(&mut self) {
+        println!("Resetting..");
+        self.cycles = 0;
+        self.instruction_counter = 0;
+        let cart = self.bus.cartridge.clone();
+        self.bus = Bus::new(cart);
+        self.regs = Regs::new();
+        self.interrupts_enabled = false;
+        self.halted = false;
+        println!("Resetting done.");
+    }
+
     fn pc_inc(&mut self, len: u16) {
         self.regs.pc = self.regs.pc.wrapping_add(len);
     }
