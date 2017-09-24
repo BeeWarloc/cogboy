@@ -3,7 +3,7 @@ extern crate rustyline;
 #[macro_use]
 extern crate nom;
 
-extern crate serde_json;
+extern crate bincode;
 
 extern crate portaudio;
 #[macro_use]

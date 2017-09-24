@@ -19,7 +19,8 @@ use cogboy_core::cpu::Cpu;
 
 use rustyline::Editor;
 
-use serde_json;
+use bincode::{deserialize_from,Infinite,serialize};
+use std::io::BufReader;
 
 #[derive(Debug)]
 pub struct SystemDebugSummary {
@@ -175,7 +176,7 @@ impl Debugger {
         let (response_tx, response_rx) = mpsc::channel();
         let snapshot: Option<Box<Cpu>> = File::open("gameboy.state")
                         .ok()
-                        .map(|f| serde_json::from_reader(f).ok())
+                        .map(|f| deserialize_from(&mut BufReader::new(f), Infinite).ok())
                         .unwrap_or(None);
         Debugger {
             message_tx: message_tx,
@@ -201,7 +202,7 @@ impl Debugger {
             DebugResponse::CpuSnapshot(cpu) => {
                 println!("Received system snapshot");
                 if let Ok(mut f) = File::create("gameboy.state") {
-                    if let Ok(serialized) = serde_json::to_vec(&cpu) {
+                    if let Ok(serialized) = serialize(&cpu, Infinite) {
                         f.write(serialized.as_slice()).expect("Unable to write cpu snapshot");
                     }
                 }

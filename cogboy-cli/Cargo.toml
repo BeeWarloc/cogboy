@@ -14,7 +14,7 @@ portaudio = "0.7.0"
 rustyline = "1.0.0"
 serde = "1.0"
 serde_derive = "1.0"
-serde_json = "1.0"
+bincode = "0.8"
 nom = "^1.2.3"
 
 [profile.dev]
