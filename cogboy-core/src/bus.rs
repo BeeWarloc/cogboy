@@ -1,4 +1,3 @@
-use std::mem;
 
 use super::cartridge::Cartridge;
 use super::sound::Sound;

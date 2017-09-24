@@ -20,7 +20,6 @@ pub mod sound;
 pub mod lcd;
 
 use self::cpu::Cpu;
-use self::bus::Bus;
 
 #[derive(Clone,Copy,Debug)]
 pub struct EventEntry {
@@ -65,7 +64,8 @@ impl System {
             let next_event_cycle = cmp::min(target_cycles, self.pending_events.front().map(|ev| ev.time).unwrap_or(std::u64::MAX));
 
             while self.cpu.cycles <= next_event_cycle {  
-                let pre_cycles = self.cpu.cycles;
+                // let pre_cycles = self.cpu.cycles;
+
                 self.cpu.step().unwrap();
 
                 /*

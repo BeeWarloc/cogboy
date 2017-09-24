@@ -7,19 +7,16 @@ use std::sync::mpsc;
 use std::fmt::Write;
 
 use std::fs::File;
-use std::io::Read;
 use std::io::Write as IoWrite;
 
 use std::thread::JoinHandle;
 use super::ControlMessage;
 use super::command::*;
 use super::Gameboy;
-use super::EventEntry;
 use cogboy_core::cpu;
 use cogboy_core::cpu::Cpu;
 
 
-use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 use serde_json;
@@ -70,11 +67,11 @@ impl DebugRequest {
         while offset < len {
             let addr = base.wrapping_add(offset);
             if let Ok((inst,_)) = cpu::Instruction::decode(addr, &cpu.bus) {
-                writeln!(output, "0x{:04x}: {}", addr, inst);
+                writeln!(output, "0x{:04x}: {}", addr, inst).unwrap();
                 offset += inst.length() as u16;
             }
             else {
-                writeln!(output, "0x{:04x}: Unrecognized opcode", addr);
+                writeln!(output, "0x{:04x}: Unrecognized opcode", addr).unwrap();
                 offset += 1;
             }
         }
@@ -205,7 +202,7 @@ impl Debugger {
                 println!("Received system snapshot");
                 if let Ok(mut f) = File::create("gameboy.state") {
                     if let Ok(serialized) = serde_json::to_vec(&cpu) {
-                        f.write(serialized.as_slice());
+                        f.write(serialized.as_slice()).expect("Unable to write cpu snapshot");
                     }
                 }
                 self.snapshot = Some(cpu);
@@ -239,7 +236,7 @@ impl Debugger {
     fn process_command(&mut self, command: Command) {
         match command {
             Command::Exit => {
-                self.message_tx.send(ControlMessage::Quit);
+                self.message_tx.send(ControlMessage::Quit).unwrap();
                 panic!("TODO: Clean exit")
             }
             Command::Save => {
@@ -301,14 +298,10 @@ impl Debugger {
             Err(err) => Err(err)
         }
     }
-
-    pub fn pause(&mut self) -> Result<()> {
-        self.message_tx.send(ControlMessage::Pause).map_err(|err| Error::Send(err))
-    }
 }
 
 
-pub fn start(message_tx: Sender<ControlMessage>, debug_response_rx: Receiver<DebugResponse>) -> JoinHandle<()> {
+pub fn start(message_tx: Sender<ControlMessage>) -> JoinHandle<()> {
     let handle = thread::spawn(move || {
         let mut debugger = Debugger::new(message_tx);
 

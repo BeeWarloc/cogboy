@@ -73,9 +73,6 @@ impl Regs {
                 self.h = (value >> 8) as u8;
                 self.l = value as u8;
             }
-            OpcodeRegister16::SP => {
-                self.sp = value;
-            }
         }
     }
 
@@ -84,7 +81,6 @@ impl Regs {
             OpcodeRegister16::BC => ((self.b as u16) << 8) | self.c as u16,
             OpcodeRegister16::DE => ((self.d as u16) << 8) | self.e as u16,
             OpcodeRegister16::HL => ((self.h as u16) << 8) | self.l as u16,
-            OpcodeRegister16::SP => self.sp,
         }
     }
 }
@@ -197,7 +193,7 @@ impl OpcodeOperand8 {
             0b01 => OpcodeOperand8::RefDE,
             0b10 => OpcodeOperand8::RefHLInc,
             0b11 => OpcodeOperand8::RefHLDec,
-            _ => panic!("TODO fuck"),
+            _ => unreachable!(),
         }
     }
 }
@@ -207,19 +203,6 @@ enum OpcodeRegister16 {
     BC,
     DE,
     HL,
-    SP,
-}
-
-impl OpcodeRegister16 {
-    fn decode(code: u8, offset: usize) -> OpcodeRegister16 {
-        match (code >> offset) & 0x3 {
-            0b00 => OpcodeRegister16::BC,
-            0b01 => OpcodeRegister16::DE,
-            0b10 => OpcodeRegister16::HL,
-            0b11 => OpcodeRegister16::SP,
-            _ => panic!("Invalid state"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy)]

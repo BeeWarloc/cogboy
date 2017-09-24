@@ -3,15 +3,9 @@ extern crate rustyline;
 #[macro_use]
 extern crate nom;
 
-#[macro_use]
-extern crate serde_derive;
-
 extern crate serde_json;
 
 extern crate portaudio;
-#[macro_use]
-extern crate enum_primitive;
-extern crate num;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -101,7 +95,7 @@ impl Gameboy {
         self.pending_events.clear();
         for ev in self.passed_events.iter() {
             self.pending_events.push_back(*ev);
-        }
+        }   
         self.passed_events.clear();
         self.target_cycles = self.cpu.cycles;
     }
@@ -209,10 +203,9 @@ impl Gameboy {
     }
 }
 
-fn start_gameboy(cpu: Cpu, message_rx: Receiver<ControlMessage>, debug_response_tx: Sender<debugger::DebugResponse>) -> GameboyThread {
+fn start_gameboy(cpu: Cpu, message_rx: Receiver<ControlMessage>) -> GameboyThread {
     let (gfx_tx, gfx_rx) = mpsc::channel();
     let (snd_tx, snd_rx) = mpsc::channel();
-    let mut paused = false;
 
     let handle = thread::spawn(move || {
         let mut gameboy = Gameboy {
@@ -331,7 +324,7 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
             }
         }
 
-        window.update_with_buffer(&buffer);
+        window.update_with_buffer(&buffer).unwrap();
 
         if window.is_key_pressed(Key::P, KeyRepeat::No) {
             message_tx.send(if paused { ControlMessage::Play } else { ControlMessage::Pause }).unwrap();
@@ -364,11 +357,8 @@ fn main() {
 
     println!("sizeof(Cpu) is {}", std::mem::size_of::<Cpu>());
 
-
-
-    let (debug_response_tx, debug_response_rx) = mpsc::channel();
     let (message_tx, message_rx) = mpsc::channel();
-    let gb_thread = start_gameboy(cpu, message_rx, debug_response_tx);
+    let gb_thread = start_gameboy(cpu, message_rx);
 
     let message_tx_joypad = message_tx.clone();
     let message_tx_debugger = message_tx.clone();
@@ -377,7 +367,7 @@ fn main() {
     let mut stream = audio_driver::init(gb_thread.snd_rx, message_tx_audio)
         .expect("Unable to open audio out stream");
 
-    let debugger_handle = debugger::start(message_tx_debugger, debug_response_rx);
+    let debugger_handle = debugger::start(message_tx_debugger);
     start_window_thread(message_tx_joypad, gb_thread.gfx_rx);
 
     message_tx.send(ControlMessage::Quit).unwrap();
@@ -386,6 +376,7 @@ fn main() {
     println!("Closed audio stream");
 
     debugger_handle.join().unwrap();
+    gb_thread.handle.join().unwrap();
 
     // let mut buffer: Vec<u32> = vec![0; 160 * 144];
 }
