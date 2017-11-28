@@ -31,6 +31,10 @@ pub struct Lcd {
     obp1: u8,
     wy: u8,
     wx: u8,
+
+    pub show_bg: bool,
+    pub show_sprites: bool,
+    pub show_window: bool
 }
 
 #[derive(Debug)]
@@ -90,6 +94,9 @@ impl Lcd {
             obp1: 0xff,
             wy: 0,
             wx: 0,
+            show_bg: true,
+            show_sprites: true,
+            show_window: true
         };
         lcd.set_mode(LcdMode::Hblank);
         lcd
@@ -437,16 +444,22 @@ impl Lcd {
     fn draw_line(&mut self) {
         let y = self.ly;
         let offset = y as usize * LCD_WIDTH;
-        for x in 0..LCD_WIDTH {
-            self.buffer[offset + x] =
-                self.get_bg_at((x as u8).wrapping_add(self.scx), y.wrapping_add(self.scy));
-        }
-        self.draw_sprites(y as i32);
-        if self.is_window_enabled() && y >= self.wy {
-            let win_y = y - self.wy;
-            for x in (self.wx.saturating_sub(7) as usize)..LCD_WIDTH {
+        if self.show_bg {
+            for x in 0..LCD_WIDTH {
                 self.buffer[offset + x] =
-                    self.get_window_at((x as u8).wrapping_sub(self.wx.wrapping_sub(7)), win_y);
+                    self.get_bg_at((x as u8).wrapping_add(self.scx), y.wrapping_add(self.scy));
+            }
+        }
+        if self.show_sprites {
+            self.draw_sprites(y as i32);
+        }
+        if self.show_window {
+            if self.is_window_enabled() && y >= self.wy {
+                let win_y = y - self.wy;
+                for x in (self.wx.saturating_sub(7) as usize)..LCD_WIDTH {
+                    self.buffer[offset + x] =
+                        self.get_window_at((x as u8).wrapping_sub(self.wx.wrapping_sub(7)), win_y);
+                }
             }
         }
     }

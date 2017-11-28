@@ -56,6 +56,9 @@ pub enum ControlMessage {
     Pause,
     Replay,
     Debug(debugger::DebugRequest, Sender<debugger::DebugResponse>),
+    LcdToggleBackground,
+    LcdToggleSprites,
+    LcdToggleWindow,
     Quit
 }
 
@@ -137,6 +140,15 @@ impl Gameboy {
                 ControlMessage::Debug(req, response_sender) => {
                     let resp = req.invoke(self);
                     response_sender.send(resp).expect("Debug channel closed");
+                }
+                ControlMessage::LcdToggleBackground => {
+                    self.cpu.bus.lcd.show_bg = !self.cpu.bus.lcd.show_bg;
+                }
+                ControlMessage::LcdToggleSprites => {
+                    self.cpu.bus.lcd.show_sprites = !self.cpu.bus.lcd.show_sprites;
+                }
+                ControlMessage::LcdToggleWindow => {
+                    self.cpu.bus.lcd.show_window = !self.cpu.bus.lcd.show_window;
                 }
                 ControlMessage::Quit => break
             }
@@ -340,6 +352,17 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
             message_tx.send(ControlMessage::ToggleSpeedLimit).unwrap();
         }
 
+        if window.is_key_pressed(Key::Key8, KeyRepeat::No) {
+            message_tx.send(ControlMessage::LcdToggleBackground).unwrap();
+        }
+
+        if window.is_key_pressed(Key::Key9, KeyRepeat::No) {
+            message_tx.send(ControlMessage::LcdToggleSprites).unwrap();
+        }
+
+        if window.is_key_pressed(Key::Key0, KeyRepeat::No) {
+            message_tx.send(ControlMessage::LcdToggleWindow).unwrap();
+        }
 
         let buttons = map_buttons(&mut window);
         if last_buttons != buttons {
