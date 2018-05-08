@@ -1,4 +1,4 @@
-use std::mem;
+﻿use std::mem;
 
 use super::constants::*;
 
@@ -151,6 +151,16 @@ impl Lcd {
         }
     }
 
+    pub fn get_full_bg(&mut self) -> Vec<u8> {
+        let mut bg = Vec::with_capacity(256 * 256);
+        for y in 0..256usize {
+            for x in 0..256usize {
+                bg.push(self.get_bg_at(x as u8, y as u8))
+            }
+        }
+        bg
+    }
+
     pub fn try_get_buffer(&mut self) -> Option<Vec<u8>> {
         if self.vblank_sync {
             self.vblank_sync = false;
@@ -249,7 +259,7 @@ impl Lcd {
         // TODO: Also sort by OAM table ordering, see http://bgb.bircd.org/pandocs.htm#vramspriteattributetableoam
         // TODO: Maybe the ordering is reverse from how it should be here, since the first sprite gets overdrawn by the last?
         entries.sort_unstable_by_key(|entry| {
-            ((((entry.x as usize) << 16) | entry.index as usize) as isize)
+            (((entry.x as usize) << 16) | entry.index as usize) as isize
         });
         if entries.len() > 10 {
             entries.truncate(10);
