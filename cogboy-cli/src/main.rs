@@ -207,7 +207,27 @@ impl Gameboy {
             
             match self.cpu.bus.lcd.try_get_buffer() {
                 Some(buffer) => {
-                    self.gfx_tx.send(buffer).expect("Graphics output channel closed");
+                    let w = LCD_WIDTH + 256;
+                    let h = 256;
+
+                    let bg = self.cpu.bus.lcd.get_full_bg();
+                    let mut b = Vec::with_capacity(w * h);
+                    for y in 0..h {
+                        for x in 0..w {
+                            let c =
+                                if x < LCD_WIDTH {
+                                    if y < LCD_HEIGHT {
+                                        buffer[y * LCD_WIDTH + x]
+                                    } else {
+                                        0
+                                    }
+                                } else {
+                                    bg[y * 256 + (x - LCD_WIDTH)]
+                                };
+                            b.push(c);
+                        }
+                    }
+                    self.gfx_tx.send(b).expect("Graphics output channel closed");
                 }
                 _ => ()
             }
@@ -288,21 +308,23 @@ fn map_buttons(window: &mut Window) -> u8 {
 }
 
 fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<u8>>) {
+    let width = 160 + 256;
+    let height = 256;
     let mut window = Window::new("Test - ESC to exit",
-                                 160,
-                                 144,
+                                 width,
+                                 height, //144,
                                  WindowOptions {
                                      borderless: false,
                                      title: true,
                                      resize: true,
-                                     scale: Scale::X4,
+                                     scale: Scale::X2,
                                  })
         .unwrap_or_else(|e| {
             panic!("{}", e);
         });
 
     let palette: [u32; 4] = [0xff9cbd0f, 0xff8cad0f, 0xff306230, 0xff0f380f];
-    let mut buffer = vec![0u32; LCD_WIDTH * LCD_HEIGHT];
+    let mut buffer = vec![0u32; width * height];
 
     // let clock_thread_handle = thread::spawn(move || {
     // loop {
@@ -323,7 +345,7 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
                     if frame_received {
                         trace!("Dropped frame");
                     }
-                    for offset in 0..(LCD_WIDTH * LCD_HEIGHT) {
+                    for offset in 0..(width * height) {
                         buffer[offset] = palette[source_buffer[offset] as usize & 0x03];
                     }
                     frame_received = true;

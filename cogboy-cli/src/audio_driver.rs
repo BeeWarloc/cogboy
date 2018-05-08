@@ -13,7 +13,7 @@ use portaudio as pa;
 
 const CHANNELS: i32 = 2;
 const SAMPLE_RATE: f64 = 44_100.0;
-const FRAMES_PER_BUFFER: u32 = 128;
+const FRAMES_PER_BUFFER: u32 = 256;
 
 
 const GAMEBOY_SAMPLE_RATE: usize = (1 << 20);
