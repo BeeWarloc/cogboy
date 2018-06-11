@@ -43,6 +43,7 @@ struct SpriteOamEntry {
     y: u8,
     tile_id: u8,
     flags: u8,
+    index: u8,
 }
 
 impl SpriteOamEntry {
@@ -221,6 +222,7 @@ impl Lcd {
             x: self.oam[offset + 1],
             tile_id: self.oam[offset + 2],
             flags: self.oam[offset + 3],
+            index: index as u8,
         }
     }
 
@@ -231,13 +233,16 @@ impl Lcd {
     fn get_oam_entries(&self, line_y: i32) -> Vec<SpriteOamEntry> {
         let sprite_height = self.get_sprite_height();
 
+        // Can we avoid allocation here by using a fixed size vector?
         let mut entries: Vec<SpriteOamEntry> = (0..40)
             .map(|idx| self.get_oam_entry(idx))
             .filter(|entry| entry.covers_line(sprite_height, line_y))
             .collect();
 
 
-        entries.sort_by_key(|entry| entry.x);
+        // TODO: Also sort by OAM table ordering, see http://bgb.bircd.org/pandocs.htm#vramspriteattributetableoam
+        // TODO: Maybe the ordering is reverse from how it should be here, since the first sprite gets overdrawn by the last?
+        entries.sort_unstable_by_key(|entry| -((((entry.x as usize) << 16) | entry.index as usize) as isize));
         if entries.len() > 10 {
             entries.truncate(10);
         }
