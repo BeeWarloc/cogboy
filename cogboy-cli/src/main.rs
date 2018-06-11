@@ -375,7 +375,7 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
 }
 
 fn main() {
-    env_logger::init().unwrap();
+    env_logger::init();
     let cpu = Cpu::new(&env::args().nth(1).unwrap_or(String::from("rom.gb")));
 
     println!("sizeof(Cpu) is {}", std::mem::size_of::<Cpu>());
