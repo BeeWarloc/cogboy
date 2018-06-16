@@ -191,13 +191,13 @@ impl IoPorts {
                         (if self.joypad & 0x10 == 0 {
                             self.joypad_all_buttons & 0xf
                         } else {
-                            0
-                        }) |
-                        (if self.joypad & 0x20 == 0 {
+                            0xf
+                        } &
+                        if self.joypad & 0x20 == 0 {
                             self.joypad_all_buttons >> 4
                         } else {
-                            0
-                        }) | self.joypad & 0xf0
+                            0xf
+                        }) | (self.joypad & 0xf0)
                     }
                     IoAddress::Sc => self.serial_transfer_control,
                     IoAddress::Div => self.timers.div,
