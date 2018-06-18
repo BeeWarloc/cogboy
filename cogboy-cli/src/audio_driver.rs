@@ -1,9 +1,3 @@
-//! Play a sine wave for several seconds.
-//!
-//! A rusty adaptation of the official PortAudio C "paex_sine.c" example by Phil Burk and Ross
-//! Bencina.
-
-
 use super::{ControlMessage, SoundMessage};
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -31,11 +25,6 @@ struct StreamCallbackState {
 pub fn init(snd_rx: Receiver<SoundMessage>,
             message_tx: Sender<ControlMessage>)
             -> Result<pa::Stream<pa::NonBlocking, pa::Output<f32>>, pa::Error> {
-
-    println!("PortAudio Test: output sine wave. SR = {}, BufSize = {}",
-             SAMPLE_RATE,
-             FRAMES_PER_BUFFER);
-
     let pa = try!(pa::PortAudio::new());
 
 
