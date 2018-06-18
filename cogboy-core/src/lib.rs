@@ -13,6 +13,7 @@ extern crate num;
 use std::cmp;
 use std::collections::VecDeque;
 
+mod romfile;
 pub mod cpu;
 pub mod bus;
 pub mod cartridge;

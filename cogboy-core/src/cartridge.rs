@@ -1,32 +1,10 @@
+use romfile::RomFile;
 use std;
 use std::io;
-use std::sync::Arc;
-
-use std::fs::File;
-use std::io::Read;
-
-use serde::{Serialize,Serializer,Deserialize,Deserializer};
-
-fn serialize_arc<T,S>(val: &Arc<T>, serializer: S) -> Result<S::Ok, S::Error>
-                                        where S : Serializer,
-                                              T : Serialize
-{
-    val.serialize(serializer)
-}
-
-fn deserialize_arc<'de,T,D>(deserializer: D) -> Result<Arc<T>, D::Error>
-                                        where D : Deserializer<'de>,
-                                              T : Deserialize<'de>, 
-{
-    let inner: T = T::deserialize(deserializer)?;
-    Ok(Arc::new(inner))
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cartridge {
-    #[serde(serialize_with = "serialize_arc")]
-    #[serde(deserialize_with = "deserialize_arc")]
-    rom: Arc<Vec<u8>>,
+    rom: RomFile,
     ram: Vec<u8>,
     pub rom_bank: u8,
     ram_enabled: bool, // ram_bank: u8
@@ -52,18 +30,11 @@ impl RomHeader {
 
 impl Cartridge {
     pub fn load(filename: &str) -> io::Result<Cartridge> {
-        let mut f = try!(File::open(&filename));
-        let mut rom: Vec<u8> = Vec::new();
-        try!(f.read_to_end(&mut rom));
-        println!("Loaded ROM with MBC type {:02x} ROM SIZE (ID) {:02x} RAM SIZE (ID) {:02x}",
-                 rom[0x147],
-                 rom[0x148],
-                 rom[0x149]);
-
-        let header = RomHeader::new(&rom);
+        let rom = RomFile::load(filename).expect("Unable to load file");
+        let header = RomHeader::new(&(rom.bytes));
 
         let cart = Cartridge {
-            rom: Arc::new(rom),
+            rom,
             rom_bank: 1,
             ram: vec![0; header.ram_size],
             ram_enabled: false,
@@ -106,7 +77,7 @@ impl Cartridge {
                 self.ram_enabled = self.ram.len() > 0 && (value & 0xf) == 0xa;
             }
             0x2000...0x3fff => {
-                self.rom_bank = std::cmp::max((value & 0x1f), 1);
+                self.rom_bank = std::cmp::max(value & 31, 1);
                 trace!("Switching to bank {}", self.rom_bank);
             }
             0x4000...0x5fff => {
