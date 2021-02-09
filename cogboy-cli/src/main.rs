@@ -30,7 +30,7 @@ use std::collections::VecDeque;
 use std::cmp;
 use std::env;
 extern crate minifb;
-use minifb::{Key, KeyRepeat, WindowOptions, Window, Scale};
+use minifb::{Key, KeyRepeat, Scale, ScaleMode, Window, WindowOptions};
 
 const LCD_WIDTH: usize = 160;
 const LCD_HEIGHT: usize = 144;
@@ -295,7 +295,11 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
                                      borderless: false,
                                      title: true,
                                      resize: true,
-                                     scale: Scale::X4,
+                                     scale: Scale::X1,
+                                     scale_mode: ScaleMode::Stretch,
+                                     topmost: true,
+                                     transparency: false,
+                                     none: false,
                                  })
         .unwrap_or_else(|e| {
             panic!("{}", e);
@@ -336,7 +340,7 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
             }
         }
 
-        window.update_with_buffer(&buffer).unwrap();
+        window.update_with_buffer(&buffer, LCD_WIDTH, LCD_HEIGHT).unwrap();
 
         if window.is_key_pressed(Key::P, KeyRepeat::No) {
             message_tx.send(if paused { ControlMessage::Play } else { ControlMessage::Pause }).unwrap();
