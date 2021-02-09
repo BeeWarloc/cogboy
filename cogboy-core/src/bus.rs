@@ -1,4 +1,5 @@
 
+use crate::RunContext;
 use super::cartridge::Cartridge;
 use super::sound::Sound;
 use super::lcd::Lcd;
@@ -265,12 +266,15 @@ impl Bus {
     pub fn read16(&self, addr: u16) -> u16 {
         self.read(addr) as u16 | (self.read(addr + 1) as u16) << 8
     }
-    pub fn write16(&mut self, addr: u16, value: u16) {
-        self.write(addr, value as u8);
-        self.write(addr + 1, (value >> 8) as u8);
+    pub fn write16(&mut self, addr: u16, value: u16, ctx: &mut impl RunContext) {
+        self.write(addr, value as u8, ctx);
+        self.write(addr + 1, (value >> 8) as u8, ctx);
     }
-    pub fn write(&mut self, addr: u16, value: u8) {
+    pub fn write(&mut self, addr: u16, value: u8, ctx: &mut impl RunContext) {
         trace!("Writing {:02x} to {:04x}", value, addr);
+
+        ctx.check_watchpoint(addr, value);
+        
         match addr {
             MEM_LCD_IO_DMA => {
                 // TODO Refactor stuff in IoPorts to Bus
@@ -279,7 +283,7 @@ impl Bus {
                 let dst_addr = 0xfe00;
                 for i in 0x00..0x9f {
                     let d = self.read(src_addr + i);
-                    self.write(dst_addr + i, d);
+                    self.write(dst_addr + i, d, ctx);
                 }
             }
             MEM_CARTRIDGE_ROM_START..=MEM_CARTRIDGE_ROM_END =>

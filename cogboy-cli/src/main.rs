@@ -12,6 +12,8 @@ extern crate env_logger;
 
 extern crate cogboy_core;
 
+use cogboy_core::System;
+use cogboy_core::RunContext;
 use cogboy_core::cpu::Cpu;
 
 mod audio_driver;
@@ -62,45 +64,69 @@ pub enum ControlMessage {
     Quit
 }
 
-#[derive(Clone,Copy,Debug)]
-pub struct EventEntry {
-    time: u64,
-    joypad: u8
-}
-
 pub struct Gameboy {
-    pub cpu: Cpu,
-    passed_events: Vec<EventEntry>,
-    pending_events: VecDeque<EventEntry>,
+    system: System,
     limit_speed: bool,
     running: bool,
     message_rx: Receiver<ControlMessage>,
     snd_tx: Sender<SoundMessage>,
     gfx_tx: Sender<Vec<u8>>,
     target_cycles: u64,
-    breakpoints: std::collections::HashSet<u16>,
-    break_cycle: u64
+    breakpoints: HashSet<u16>,
+    watchpoints: HashSet<u16>,
+    break_cycle: u64,
+}
+
+struct GameboyRunContext<'a> {
+    watchpoint_triggered: Option<(u16, u8)>,
+    breakpoints: &'a HashSet<u16>,
+    watchpoints: &'a HashSet<u16>,
+    break_cycle: u64,
+}
+
+impl<'a> RunContext for GameboyRunContext<'a> {
+    #[inline]
+    fn check_watchpoint(&mut self, addr: u16, value: u8) {
+        if self.watchpoints.contains(&addr) {
+            self.watchpoint_triggered = (addr, value).into()
+        }
+    }
+
+    #[inline]
+    fn after_step(&mut self, cpu: &Cpu, passed_cycles: usize) -> bool {
+        let pre_cycles = cpu.cycles - passed_cycles as u64;
+        if pre_cycles < self.break_cycle && cpu.cycles >= self.break_cycle {
+            println!("At or passed break cycle {}, breaking at {}", self.break_cycle, cpu.cycles);
+            return true
+        }
+        if self.breakpoints.contains(&cpu.regs.pc) {
+            println!("At breakpoint!");
+            return true
+        }
+        if let Some((watchpoint_addr, value)) = self.watchpoint_triggered {
+            println!("Watchpoint hit: {:02x} written to {:04x}, breaking at cycle {}", value, watchpoint_addr, cpu.cycles);
+            self.watchpoint_triggered = None;
+            return true;
+        }
+
+        return false;
+    }
 }
 
 impl Gameboy {
     pub fn pause(&mut self) {
         self.running = false;
-        self.target_cycles = self.cpu.cycles;
+        self.target_cycles = self.system.cpu.cycles;
     }
 
     pub fn play(&mut self) {
         self.running = true;
-        self.target_cycles = self.cpu.cycles;
+        self.target_cycles = self.system.cpu.cycles;
     }
 
     fn replay(&mut self) {
-        self.cpu.reset();
-        self.pending_events.clear();
-        for ev in self.passed_events.iter() {
-            self.pending_events.push_back(*ev);
-        }   
-        self.passed_events.clear();
-        self.target_cycles = self.cpu.cycles;
+        self.system.rewind_to_closest_snapshot(0);
+        self.target_cycles = self.system.cpu.cycles;
     }
 
     fn event_loop(&mut self) {
@@ -117,13 +143,7 @@ impl Gameboy {
                     self.target_cycles += cycles as u64;
                 }
                 ControlMessage::Joypad(buttons) => {
-                    if self.cpu.bus.io.joypad_all_buttons != buttons {
-                        if self.pending_events.len() > 0 {
-                            println!("Overriding pending events!");
-                            self.pending_events.clear();
-                        }
-                        self.pending_events.push_front(EventEntry { time: self.cpu.cycles, joypad: buttons });
-                    }
+                    self.system.update_joypad(buttons)
                 }
                 ControlMessage::ToggleSpeedLimit => {
                     self.limit_speed = !self.limit_speed;
@@ -142,58 +162,40 @@ impl Gameboy {
                     response_sender.send(resp).expect("Debug channel closed");
                 }
                 ControlMessage::LcdToggleBackground => {
-                    self.cpu.bus.lcd.show_bg = !self.cpu.bus.lcd.show_bg;
+                    self.system.cpu.bus.lcd.show_bg = !self.system.cpu.bus.lcd.show_bg;
                 }
                 ControlMessage::LcdToggleSprites => {
-                    self.cpu.bus.lcd.show_sprites = !self.cpu.bus.lcd.show_sprites;
+                    self.system.cpu.bus.lcd.show_sprites = !self.system.cpu.bus.lcd.show_sprites;
                 }
                 ControlMessage::LcdToggleWindow => {
-                    self.cpu.bus.lcd.show_window = !self.cpu.bus.lcd.show_window;
+                    self.system.cpu.bus.lcd.show_window = !self.system.cpu.bus.lcd.show_window;
                 }
                 ControlMessage::Quit => break
             }
 
             if self.running {
                 let target_cycles =
-                    if self.cpu.cycles > self.break_cycle {
+                    if self.system.cpu.cycles > self.break_cycle {
                         self.target_cycles
                     } else {
                         cmp::min(self.target_cycles, self.break_cycle)
                     };
 
-                while self.running && self.cpu.cycles <= target_cycles {
-                    while let Some(ev) = self.pending_events.pop_front() {
-                        if ev.time > self.cpu.cycles {
-                            self.pending_events.push_front(ev);
-                            break;
-                        }
-                        self.cpu.bus.io.joypad_all_buttons = ev.joypad;
-                        self.passed_events.push(ev);
+                let mut ctx = GameboyRunContext {
+                    watchpoints: &self.watchpoints,
+                    breakpoints: &self.breakpoints,
+                    watchpoint_triggered: None,
+                    break_cycle: self.break_cycle,
+                };
+
+                // Never rewind here
+                if target_cycles > self.system.cpu.cycles {
+                    self.system.run_to_cycle(target_cycles, &mut ctx);
+                    let samples = self.system.cpu.bus.dequeue_samples();
+
+                    if self.limit_speed {
+                        self.snd_tx.send(SoundMessage::Buffer(samples)).expect("Sound output channel closed");
                     }
-
-                    let next_event_cycle = cmp::min(target_cycles, self.pending_events.front().map(|ev| ev.time).unwrap_or(std::u64::MAX));
-
-                    while self.cpu.cycles <= next_event_cycle {
-                        let pre_cycles = self.cpu.cycles;
-                        self.cpu.step().unwrap();
-                        if pre_cycles < self.break_cycle && self.cpu.cycles >= self.break_cycle {
-                            println!("At or passed break cycle {}, breaking at {}", self.break_cycle, self.cpu.cycles);
-                            self.pause();
-                            break;
-                        }
-                        if self.breakpoints.contains(&self.cpu.regs.pc) {
-                            println!("At breakpoint!");
-                            self.pause();
-                            break;
-                        }
-                    }
-                    // trace!("Cpu state {}: {:?} IME {} IE {:05b} {:05b}", cpu.cycles, cpu.regs, cpu.interrupts_enabled,
-                    //       cpu.bus.io.interrupt_enable, cpu.bus.io.interrupt_flags );;
-                }
-                let samples = self.cpu.bus.dequeue_samples();
-
-                if self.limit_speed {
-                    self.snd_tx.send(SoundMessage::Buffer(samples)).expect("Sound output channel closed");
                 }
             }
 
@@ -205,8 +207,14 @@ impl Gameboy {
                 snd_tx.send(s).unwrap();
             }*/
             
-            match self.cpu.bus.lcd.try_get_buffer() {
+            match self.system.cpu.bus.lcd.try_get_buffer() {
                 Some(buffer) => {
+                    // Snapshot here periodically for back stepping
+                    if self.system.cycles_since_last_snapshot() > cogboy_core::constants::CPU_FREQ as u64 {
+                        self.system.take_snapshot();
+                        println!("NOCOMMIT!!!! SNAPSHOT SAVED!!! total size of snapshot store is {}KiB", (self.system.snapshots_size() as f64) / 1024.0);
+                    }
+                    //self.history.push(self.cpu.clone().into());
                     self.gfx_tx.send(buffer).expect("Graphics output channel closed");
                 }
                 _ => ()
@@ -215,15 +223,18 @@ impl Gameboy {
     }
 }
 
-fn start_gameboy(cpu: Cpu, message_rx: Receiver<ControlMessage>) -> GameboyThread {
+fn start_gameboy(cpu: Box<Cpu>, message_rx: Receiver<ControlMessage>) -> GameboyThread {
     let (gfx_tx, gfx_rx) = mpsc::channel();
     let (snd_tx, snd_rx) = mpsc::channel();
 
     let handle = thread::spawn(move || {
         let mut gameboy = Gameboy {
-            cpu: cpu,
-            passed_events: Vec::new(),
-            pending_events: VecDeque::new(),
+            system: System {
+                cpu,
+                passed_events: Vec::new(),
+                pending_events: VecDeque::new(),
+                snapshots: Vec::new(),
+            },
             running: true,
             limit_speed: true,
             message_rx: message_rx,
@@ -231,7 +242,8 @@ fn start_gameboy(cpu: Cpu, message_rx: Receiver<ControlMessage>) -> GameboyThrea
             gfx_tx: gfx_tx,
             target_cycles: 0,
             breakpoints: HashSet::new(),
-            break_cycle: std::u64::MAX
+            watchpoints: HashSet::new(),
+            break_cycle: std::u64::MAX,
         };
         gameboy.event_loop();
     });
@@ -380,7 +392,7 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
 
 fn main() {
     env_logger::init();
-    let cpu = Cpu::new(&env::args().nth(1).unwrap_or(String::from("rom.gb")));
+    let cpu = Cpu::new(&env::args().nth(1).unwrap_or(String::from("rom.gb"))).into();
 
     println!("sizeof(Cpu) is {}", std::mem::size_of::<Cpu>());
 

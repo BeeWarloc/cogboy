@@ -1,3 +1,4 @@
+use crate::RunContext;
 use std::fmt;
 use super::bus::Bus;
 use super::cartridge::Cartridge;
@@ -678,15 +679,14 @@ impl Cpu {
     }
 
     pub fn reset(&mut self) {
-        println!("Resetting..");
         self.cycles = 0;
         self.instruction_counter = 0;
-        let cart = self.bus.cartridge.clone();
+        let mut cart = self.bus.cartridge.clone();
+        cart.clear_ram();
         self.bus = Bus::new(cart);
         self.regs = Regs::new();
         self.interrupts_enabled = false;
         self.halted = false;
-        println!("Resetting done.");
     }
 
     fn pc_inc(&mut self, len: u16) {
@@ -697,7 +697,7 @@ impl Cpu {
         self.cycles += count;
     }
 
-    fn write_16bit_operand(&mut self, reg: &OpcodeOperand16, value: u16) {
+    fn write_16bit_operand(&mut self, reg: &OpcodeOperand16, value: u16, ctx: &mut impl RunContext) {
         match *reg {
             OpcodeOperand16::AF => {
                 self.regs.a = (value >> 8) as u8;
@@ -719,7 +719,7 @@ impl Cpu {
                 self.regs.sp = value;
             }
             OpcodeOperand16::RefImmAddr(addr) => {
-                self.bus.write16(addr, value);
+                self.bus.write16(addr, value, ctx);
             }
             OpcodeOperand16::Imm(_) => panic!("Doh, can't write to immediate"),
             OpcodeOperand16::SPPlusImm(_) => panic!("Doh, can't write to immediate"),
@@ -758,9 +758,8 @@ impl Cpu {
         value
     }
 
-    fn store(&mut self, addr: u16, value: u8) {
-        let value = self.bus.write(addr, value);
-        value
+    fn store(&mut self, addr: u16, value: u8, ctx: &mut impl RunContext) {
+        self.bus.write(addr, value, ctx)
     }
 
 
@@ -806,7 +805,7 @@ impl Cpu {
             }
         }
     }
-    fn write_8bit_operand(&mut self, operand: &OpcodeOperand8, value: u8) {
+    fn write_8bit_operand(&mut self, operand: &OpcodeOperand8, value: u8, ctx: &mut impl RunContext) {
         match *operand {
             OpcodeOperand8::A => self.regs.a = value,
             OpcodeOperand8::B => self.regs.b = value,
@@ -818,40 +817,40 @@ impl Cpu {
             OpcodeOperand8::Imm(_) => panic!("Doh, can't write to immediate"),
             OpcodeOperand8::RefBC => {
                 let addr = self.regs.read_reg16(OpcodeRegister16::BC);
-                self.store(addr, value)
+                self.store(addr, value, ctx)
             }
             OpcodeOperand8::RefDE => {
                 let addr = self.regs.read_reg16(OpcodeRegister16::DE);
-                self.store(addr, value)
+                self.store(addr, value, ctx)
             }
             OpcodeOperand8::RefHLInc => {
                 let hl = self.regs.read_reg16(OpcodeRegister16::HL);
-                self.store(hl, value);
+                self.store(hl, value, ctx);
                 self.regs.write_reg16(OpcodeRegister16::HL, hl.wrapping_add(1));
             }
             OpcodeOperand8::RefHLDec => {
                 let hl = self.regs.read_reg16(OpcodeRegister16::HL);
-                self.store(hl, value);
+                self.store(hl, value, ctx);
                 self.regs.write_reg16(OpcodeRegister16::HL, hl.wrapping_sub(1));
             }
             OpcodeOperand8::RefUpperImmOffset(offset) => {
-                self.store(0xff00 + (offset as u16), value)
+                self.store(0xff00 + (offset as u16), value, ctx)
             }
             OpcodeOperand8::RefUpperCOffset => {
                 let addr = 0xff00 + (self.regs.c as u16);
-                self.store(addr, value)
+                self.store(addr, value, ctx)
             }
-            OpcodeOperand8::RefImmAddr(addr) => self.store(addr, value),
+            OpcodeOperand8::RefImmAddr(addr) => self.store(addr, value, ctx),
             OpcodeOperand8::RefHL => {
                 let addr = self.regs.read_reg16(OpcodeRegister16::HL);
-                self.store(addr, value)
+                self.store(addr, value, ctx)
             }
         }
     }
 
-    fn push(&mut self, value: u16) {
+    fn push(&mut self, value: u16, ctx: &mut impl RunContext) {
         let sp = self.regs.sp.wrapping_sub(2);
-        self.bus.write16(sp, value);
+        self.bus.write16(sp, value, ctx);
         self.regs.sp = sp;
     }
 
@@ -883,7 +882,7 @@ impl Cpu {
         }
     }
 
-    fn execute_instruction(&mut self, instruction: Instruction) -> Result<(), &'static str> {
+    fn execute_instruction(&mut self, instruction: Instruction, ctx: &mut impl RunContext) -> Result<(), &'static str> {
         match instruction {
             Instruction::Nop => Ok(()),
             Instruction::Rlca => {
@@ -901,7 +900,7 @@ impl Cpu {
             Instruction::Call(cond, addr) => {
                 if self.check_flag(cond) {
                     let saved_pc = self.regs.pc;
-                    self.push(saved_pc);
+                    self.push(saved_pc, ctx);
                     self.regs.pc = addr;
                     match cond {
                         OpcodeCondition::None => {}
@@ -914,7 +913,7 @@ impl Cpu {
             }
             Instruction::Rst(addr) => {
                 let saved_pc = self.regs.pc;
-                self.push(saved_pc);
+                self.push(saved_pc, ctx);
                 self.regs.pc = addr;
                 Ok(())
             }
@@ -988,14 +987,14 @@ impl Cpu {
             }
             Instruction::Inc(operand) => {
                 let value = self.read_8bit_operand(&operand).wrapping_add(1);
-                self.write_8bit_operand(&operand, value);
+                self.write_8bit_operand(&operand, value, ctx);
                 self.regs.f = (self.regs.f & CPU_FLAG_C) | if value == 0 { CPU_FLAG_Z } else { 0 } |
                               if (value & 0xf) == 0 { CPU_FLAG_H } else { 0 };
                 Ok(())
             }
             Instruction::Dec(operand) => {
                 let value = self.read_8bit_operand(&operand).wrapping_sub(1);
-                self.write_8bit_operand(&operand, value);
+                self.write_8bit_operand(&operand, value, ctx);
                 self.regs.f = (self.regs.f & CPU_FLAG_C) | if value == 0 { CPU_FLAG_Z } else { 0 } |
                               if (value & 0xf) == 0xf { CPU_FLAG_H } else { 0 } |
                               CPU_FLAG_N;
@@ -1003,22 +1002,22 @@ impl Cpu {
             }
             Instruction::Inc16(operand) => {
                 let value = self.read_16bit_operand(&operand).wrapping_add(1);
-                self.write_16bit_operand(&operand, value);
+                self.write_16bit_operand(&operand, value, ctx);
                 Ok(())
             }
             Instruction::Dec16(operand) => {
                 let value = self.read_16bit_operand(&operand).wrapping_sub(1);
-                self.write_16bit_operand(&operand, value);
+                self.write_16bit_operand(&operand, value, ctx);
                 Ok(())
             }
             Instruction::Ld(_, dst, src) => {
                 let value = self.read_8bit_operand(&src);
-                self.write_8bit_operand(&dst, value);
+                self.write_8bit_operand(&dst, value, ctx);
                 Ok(())
             }
             Instruction::Ld16(_, dst, src) => {
                 let value = self.read_16bit_operand(&src);
-                self.write_16bit_operand(&dst, value);
+                self.write_16bit_operand(&dst, value, ctx);
                 Ok(())
             }
             Instruction::Jr(cond, imm) => {
@@ -1116,7 +1115,7 @@ impl Cpu {
                 let rhs = self.read_16bit_operand(&operand);
 
                 let (result, carry) = lhs.overflowing_add(rhs);
-                self.write_16bit_operand(&dst, result);
+                self.write_16bit_operand(&dst, result, ctx);
                 // TODO: Unsure if half carry should be set
                 self.regs.f = (self.regs.f & CPU_FLAG_Z) | if carry { CPU_FLAG_C } else { 0 } |
                               if ((lhs & 0xfff) + (rhs & 0xfff)) > 0xfff {
@@ -1166,12 +1165,12 @@ impl Cpu {
             }
             Instruction::Push(operand) => {
                 let value = self.read_16bit_operand(&operand);
-                self.push(value);
+                self.push(value, ctx);
                 Ok(())
             }
             Instruction::Pop(operand) => {
                 let value = self.pop();
-                self.write_16bit_operand(&operand, value);
+                self.write_16bit_operand(&operand, value, ctx);
                 Ok(())
             }
             Instruction::Rra => {
@@ -1200,14 +1199,14 @@ impl Cpu {
             }
             Instruction::Rlc(operand) => {
                 let result = self.read_8bit_operand(&operand).rotate_left(1);
-                self.write_8bit_operand(&operand, result);
+                self.write_8bit_operand(&operand, result, ctx);
                 self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
                               if (result & 1) == 1 { CPU_FLAG_C } else { 0 };
                 Ok(())
             }
             Instruction::Rrc(operand) => {
                 let result = self.read_8bit_operand(&operand).rotate_right(1);
-                self.write_8bit_operand(&operand, result);
+                self.write_8bit_operand(&operand, result, ctx);
                 self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
                               if (result & 0x80) == 0x80 {
                     CPU_FLAG_C
@@ -1224,7 +1223,7 @@ impl Cpu {
                 } else {
                     0
                 };
-                self.write_8bit_operand(&operand, result);
+                self.write_8bit_operand(&operand, result, ctx);
                 self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
                               if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
                 Ok(())
@@ -1232,7 +1231,7 @@ impl Cpu {
             Instruction::Rl(operand) => {
                 let value = self.read_8bit_operand(&operand);
                 let result = value << 1 | if self.regs.f & CPU_FLAG_C != 0 { 1 } else { 0 };
-                self.write_8bit_operand(&operand, result);
+                self.write_8bit_operand(&operand, result, ctx);
                 self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
                               if (value & 0x80) == 0x80 {
                     CPU_FLAG_C
@@ -1244,7 +1243,7 @@ impl Cpu {
             Instruction::Sla(operand) => {
                 let value = self.read_8bit_operand(&operand);
                 let result = value << 1;
-                self.write_8bit_operand(&operand, result);
+                self.write_8bit_operand(&operand, result, ctx);
                 self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
                               if (value & 0x80) == 0x80 {
                     CPU_FLAG_C
@@ -1256,7 +1255,7 @@ impl Cpu {
             Instruction::Sra(operand) => {
                 let value = self.read_8bit_operand(&operand);
                 let result = value >> 1 | (value & 0x80);
-                self.write_8bit_operand(&operand, result);
+                self.write_8bit_operand(&operand, result, ctx);
                 self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
                               if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
                 Ok(())
@@ -1265,13 +1264,13 @@ impl Cpu {
                 let value = self.read_8bit_operand(&operand);
                 let result = (value >> 4) | (value << 4);
                 self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 };
-                self.write_8bit_operand(&operand, result);
+                self.write_8bit_operand(&operand, result, ctx);
                 Ok(())
             }
             Instruction::Srl(operand) => {
                 let value = self.read_8bit_operand(&operand);
                 let result = value >> 1;
-                self.write_8bit_operand(&operand, result);
+                self.write_8bit_operand(&operand, result, ctx);
                 self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
                               if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
                 Ok(())
@@ -1287,18 +1286,18 @@ impl Cpu {
             }
             Instruction::Res(operand, offset) => {
                 let value = self.read_8bit_operand(&operand) & !(1 << offset);
-                self.write_8bit_operand(&operand, value);
+                self.write_8bit_operand(&operand, value, ctx);
                 Ok(())
             }
             Instruction::Set(operand, offset) => {
                 let value = self.read_8bit_operand(&operand) | (1 << offset);
-                self.write_8bit_operand(&operand, value);
+                self.write_8bit_operand(&operand, value, ctx);
                 Ok(())
             }
         }
     }
 
-    pub fn step(&mut self) -> Result<(), &'static str> {
+    pub fn step(&mut self, ctx: &mut impl RunContext) -> Result<usize, &'static str> {
         let pre_cycles = self.cycles;
 
         let mut interrupt_called = false;
@@ -1314,7 +1313,7 @@ impl Cpu {
                 self.interrupts_enabled = false;
                 self.bus.io.interrupt_flags &= !(1u8 << int_number);
                 let saved_pc = self.regs.pc;
-                self.push(saved_pc);
+                self.push(saved_pc, ctx);
                 self.add_cycles(20);
                 self.regs.pc = 0x40u16 + int_number * 8;
                 interrupt_called = true;
@@ -1332,7 +1331,7 @@ impl Cpu {
                 trace!("inst: {:?}", instruction);
                 let inst_len = instruction.length();
                 self.pc_inc(inst_len as u16);
-                self.execute_instruction(instruction)?;
+                self.execute_instruction(instruction, ctx)?;
                 self.add_cycles(timing as u64);
                 self.instruction_counter += 1;
             } else {
@@ -1349,6 +1348,6 @@ impl Cpu {
             self.halted = false;
         }
 
-        Ok(())
+        Ok(passed_cycles)
     }
 }

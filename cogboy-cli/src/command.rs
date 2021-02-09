@@ -7,6 +7,7 @@ use std::borrow::Cow;
 pub enum Breakpoint
 {
     Code(u16),
+    Watch(u16),
     Cycle(u64)
 }
 
@@ -14,6 +15,7 @@ pub enum Breakpoint
 pub enum Command {
     ShowRegs,
     Step,
+    RevStep,
     Continue,
     Goto(u32),
     ShowMem(Option<u32>),
@@ -22,11 +24,9 @@ pub enum Command {
     AddLabel(String, u32),
     RemoveLabel(String),
     ListBreakpoints,
+    ListWatchpoints,
     AddBreakpoint(Breakpoint),
     RemoveBreakpoint(Breakpoint),
-    Watchpoint,
-    AddWatchpoint(u32),
-    RemoveWatchpoint(u32),
     Save,
     Load,
 
@@ -53,6 +53,7 @@ named!(
             save_state |
             load_state |
             step |
+            revstep |
             continue_ |
             goto |
             show_mem |
@@ -76,6 +77,12 @@ named!(
     map!(
         alt_complete!(tag!("step") | tag!("s")),
     |_| Command::Step));
+
+named!(
+    revstep<Command>,
+    map!(
+        alt_complete!(tag!("rstep") | tag!("rs")),
+    |_| Command::RevStep));
 
 named!(
     continue_<Command>,
@@ -183,8 +190,14 @@ named!(
     || Breakpoint::Cycle(cycle)));
 
 named!(
+    breakpoint_watchpoint_parser<Breakpoint>,
+    chain!(
+        addr: preceded!(tag!("w"), hex_u16_parser),
+    || Breakpoint::Watch(addr)));
+
+named!(
    breakpoint_parser<Breakpoint>,
-   alt_complete!(breakpoint_code_type_parser | breakpoint_cycle_type_parser));
+   alt_complete!(breakpoint_code_type_parser | breakpoint_cycle_type_parser | breakpoint_watchpoint_parser));
 
 named!(
     breakpoint<Command>,
@@ -212,7 +225,7 @@ named!(
     watchpoint<Command>,
     map!(
         alt_complete!(tag!("watchpoint") | tag!("w")),
-    |_| Command::Watchpoint));
+    |_| Command::ListWatchpoints));
 
 named!(
     add_watchpoint<Command>,
@@ -220,7 +233,7 @@ named!(
         alt_complete!(tag!("addwatchpoint") | tag!("aw")) ~
         space ~
         addr: hex_u32_parser,
-    || Command::AddWatchpoint(addr)));
+    || Command::AddBreakpoint(Breakpoint::Watch(addr as u16))));
 
 named!(
     remove_watchpoint<Command>,
@@ -228,7 +241,7 @@ named!(
         alt_complete!(tag!("removewatchpoint") | tag!("rw")) ~
         space ~
         addr: hex_u32_parser,
-    || Command::RemoveWatchpoint(addr)));
+    || Command::RemoveBreakpoint(Breakpoint::Watch(addr as u16))));
 
 named!(
     exit<Command>,

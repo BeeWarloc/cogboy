@@ -1,6 +1,9 @@
+use crate::GameboyRunContext;
 use std;
+use std::collections::HashSet;
 use std::result;
 use std::thread;
+use std::u64;
 use std::sync::mpsc::{Receiver, Sender, SendError, RecvError};
 use std::sync::mpsc;
 
@@ -11,7 +14,7 @@ use std::io::Write as IoWrite;
 
 use std::thread::JoinHandle;
 use super::ControlMessage;
-use super::command::*;
+use super::command::{Command, Breakpoint};
 use super::Gameboy;
 use cogboy_core::cpu;
 use cogboy_core::cpu::Cpu;
@@ -19,13 +22,14 @@ use cogboy_core::cpu::Cpu;
 
 use rustyline::Editor;
 
-use bincode::{deserialize_from,Infinite,serialize};
+use bincode::{deserialize_from, serialize};
 use std::io::BufReader;
 
 #[derive(Debug)]
 pub struct SystemDebugSummary {
     regs: cpu::Regs,
     cycles: u64,
+    instruction_counter: u64,
     break_cycle: u64,
     rom_bank: u8,
 }
@@ -33,9 +37,10 @@ pub struct SystemDebugSummary {
 impl SystemDebugSummary {
     pub fn new(gb: &Gameboy) -> SystemDebugSummary {
         SystemDebugSummary {
-            regs: gb.cpu.regs.clone(),
-            cycles: gb.cpu.cycles,
-            rom_bank: gb.cpu.bus.cartridge.rom_bank,
+            regs: gb.system.cpu.regs.clone(),
+            cycles: gb.system.cpu.cycles,
+            instruction_counter: gb.system.cpu.instruction_counter,
+            rom_bank: gb.system.cpu.bus.cartridge.rom_bank,
             break_cycle: gb.break_cycle
         }
     }
@@ -47,7 +52,9 @@ pub enum DebugResponse {
     Disassembly(String),
     CpuSnapshot(Box<Cpu>),
     Step(u16),
-    Breakpoints(Vec<u16>),
+    Breakpoints(Vec<Breakpoint>),
+    Watchpoints(Vec<Breakpoint>),
+    ReadMem(u16, Vec<u8>)
 }
 
 pub enum DebugRequest {
@@ -56,9 +63,11 @@ pub enum DebugRequest {
     GetCpuSnapshot,
     SetCpuSnapshot(Box<Cpu>),
     Step,
+    RevStep,
     Continue,
     SetBreakpoints(Vec<Breakpoint>),
-    ListBreakpoints
+    ListBreakpoints,
+    ReadMem(u16, u16)
 }
 
 impl DebugRequest {
@@ -80,30 +89,64 @@ impl DebugRequest {
         output
     }
 
+    fn get_breakpoints(gameboy: &Gameboy) -> Vec<Breakpoint> {
+        gameboy.breakpoints.iter().map(|x| Breakpoint::Code(*x)).chain(gameboy.watchpoints.iter().map(|x| Breakpoint::Watch(*x))).collect()
+    }
+
     pub fn invoke(&self, gameboy: &mut Gameboy) -> DebugResponse {
         match *self {
             DebugRequest::GetSummary => {
                 DebugResponse::Summary(SystemDebugSummary::new(gameboy))
             }
             DebugRequest::GetDisassembly(addr, len) => {
-                let cpu = &gameboy.cpu;
+                let cpu = &gameboy.system.cpu;
                 DebugResponse::Disassembly(DebugRequest::disassemble(cpu, addr.unwrap_or(cpu.regs.pc), len.unwrap_or(10)))
             },
-            DebugRequest::GetCpuSnapshot => DebugResponse::CpuSnapshot(Box::new(gameboy.cpu.clone())),
+            DebugRequest::GetCpuSnapshot => DebugResponse::CpuSnapshot(gameboy.system.cpu.clone()),
             DebugRequest::SetCpuSnapshot(ref cpu) => {
-                gameboy.cpu.clone_from(cpu);
-                gameboy.target_cycles = gameboy.cpu.cycles;
-                while let Some(ev) = gameboy.passed_events.pop() {
-                    if ev.time > gameboy.cpu.cycles {
-                        gameboy.pending_events.push_front(ev);
+                gameboy.system.cpu.clone_from(cpu);
+                gameboy.target_cycles = gameboy.system.cpu.cycles;
+                while let Some(ev) = gameboy.system.passed_events.pop() {
+                    if ev.time > gameboy.system.cpu.cycles {
+                        gameboy.system.pending_events.push_front(ev);
                     }
                     else {
-                        gameboy.passed_events.push(ev);
+                        gameboy.system.passed_events.push(ev);
                         break;
                     }
                 }
                 DebugResponse::Summary(SystemDebugSummary::new(gameboy))
             }
+            DebugRequest::RevStep => {
+                // TODO: Better error handling
+                if gameboy.running {
+                    println!("Pausing!");
+                    gameboy.pause();
+                }
+                else
+                {
+                    println!("Reverse stepping!");
+                    let mut ctx = GameboyRunContext {
+                        break_cycle: u64::MAX,
+                        breakpoints: &HashSet::new(),
+                        watchpoints: &HashSet::new(),
+                        watchpoint_triggered: None,
+                    };
+                    let target_inst_count = gameboy.system.cpu.instruction_counter.saturating_sub(1);
+
+                    // First rewind to a bit before instruction count
+                    let some_cycles_before_prev_instruction = gameboy.system.cpu.cycles.saturating_sub(32);
+                    gameboy.system.run_to_cycle(some_cycles_before_prev_instruction, &mut ctx);
+
+                    // Now step forward until our instruction counter hits prev_inst_count
+                    while gameboy.system.cpu.instruction_counter < target_inst_count {
+                        // TODO: STEP EXACTLY TO INSTRUCTION COUNT - 1
+                        let target_cycles = gameboy.system.cpu.cycles + 1;
+                        gameboy.system.run_to_cycle(target_cycles, &mut ctx);
+                    }
+                }
+                DebugResponse::Step(gameboy.system.cpu.regs.pc)
+            },
             DebugRequest::Step => {
                 // TODO: Better error handling
                 if gameboy.running {
@@ -113,12 +156,19 @@ impl DebugRequest {
                 else
                 {
                     println!("Stepping!");
-                    let pre_inst_count = gameboy.cpu.instruction_counter;
-                    while pre_inst_count == gameboy.cpu.instruction_counter {
-                        gameboy.cpu.step().unwrap();
+                    let mut ctx = GameboyRunContext {
+                        break_cycle: u64::MAX,
+                        breakpoints: &HashSet::new(),
+                        watchpoints: &HashSet::new(),
+                        watchpoint_triggered: None,
+                    };
+                    let start_inst_count = gameboy.system.cpu.instruction_counter;
+                    while start_inst_count == gameboy.system.cpu.instruction_counter {
+                        let target_cycles = gameboy.system.cpu.cycles + 1;
+                        gameboy.system.run_to_cycle(target_cycles, &mut ctx);
                     }
                 }
-                DebugResponse::Step(gameboy.cpu.regs.pc)
+                DebugResponse::Step(gameboy.system.cpu.regs.pc)
             }
             DebugRequest::Continue => {
                 gameboy.play();
@@ -139,15 +189,23 @@ impl DebugRequest {
                             }
                             gameboy.break_cycle = cycle;
                         }
+                        Breakpoint::Watch(addr) => {
+                            gameboy.watchpoints.insert(addr);
+                        }
                     }
                 }
-                let addrs = (&gameboy.breakpoints).into_iter().map(|x| *x).collect();
-                DebugResponse::Breakpoints(addrs)
+                DebugResponse::Breakpoints(Self::get_breakpoints(gameboy))
             },
             DebugRequest::ListBreakpoints => {
-                let addrs = (&gameboy.breakpoints).into_iter().map(|x| *x).collect();
-                DebugResponse::Breakpoints(addrs)
+                DebugResponse::Breakpoints(Self::get_breakpoints(gameboy))
             },
+            DebugRequest::ReadMem(addr, len) => {
+                let mut vec = Vec::new();
+                for i in addr..addr.saturating_add(len) {
+                    vec.push(gameboy.system.cpu.bus.read(i));
+                }
+                DebugResponse::ReadMem(addr, vec)
+            }
         }
     }
 }
@@ -167,7 +225,8 @@ struct Debugger {
     response_tx: Sender<DebugResponse>,
     cursor: u16,
     breakpoints: Vec<Breakpoint>,
-    snapshot: Option<Box<Cpu>>
+    snapshot: Option<Box<Cpu>>,
+    repeated_command: Option<Command>,
 }
 
 impl Debugger {
@@ -176,7 +235,7 @@ impl Debugger {
         let (response_tx, response_rx) = mpsc::channel();
         let snapshot: Option<Box<Cpu>> = File::open("gameboy.state")
                         .ok()
-                        .map(|f| deserialize_from(&mut BufReader::new(f), Infinite).ok())
+                        .map(|f| deserialize_from(&mut BufReader::new(f)).ok())
                         .unwrap_or(None);
         Debugger {
             message_tx: message_tx,
@@ -184,7 +243,8 @@ impl Debugger {
             response_tx: response_tx,
             breakpoints: Vec::new(),
             cursor: 0x100,
-            snapshot: snapshot
+            snapshot: snapshot,
+            repeated_command: None,
         }
     }
 
@@ -202,15 +262,29 @@ impl Debugger {
             DebugResponse::CpuSnapshot(cpu) => {
                 println!("Received system snapshot");
                 if let Ok(mut f) = File::create("gameboy.state") {
-                    if let Ok(serialized) = serialize(&cpu, Infinite) {
+                    if let Ok(serialized) = serialize(&cpu) {
                         f.write(serialized.as_slice()).expect("Unable to write cpu snapshot");
                     }
                 }
                 self.snapshot = Some(cpu);
             }
-            DebugResponse::Breakpoints(ref addresses) => {
-                for addr in addresses {
-                    println!("{:04x}", addr);
+            DebugResponse::Breakpoints(ref bps) | DebugResponse::Watchpoints(ref bps) => {
+                for bp in bps {
+                    match bp {
+                        Breakpoint::Code(addr) => { println!("{:04x}", addr); }
+                        Breakpoint::Watch(addr) => { println!("w{:04x}", addr); }
+                        Breakpoint::Cycle(cycle) => { println!("@{}", cycle); }
+                    }
+                }
+            }
+            DebugResponse::ReadMem(mut addr, ref data) => {
+                for x in data.chunks(16) {
+                    print!("0x{:04x}:", addr);
+                    for b in x {
+                        print!(" {:02x}", b);
+                    }
+                    println!("");
+                    addr += x.len() as u16;
                 }
             }
         }
@@ -235,6 +309,11 @@ impl Debugger {
     }
 
     fn process_command(&mut self, command: Command) {
+        let command = match (command, self.repeated_command.clone()) {
+            (Command::Repeat, Some(repeated_command)) => repeated_command,
+            (c, _) => c
+        };
+        self.repeated_command = None;
         match command {
             Command::Exit => {
                 self.message_tx.send(ControlMessage::Quit).unwrap();
@@ -252,6 +331,7 @@ impl Debugger {
                 }
             }
             Command::ShowRegs => {
+                self.repeated_command = Some(command.clone());
                 self.send_and_handle(DebugRequest::GetSummary).unwrap()
             }
             Command::Disassemble(count) => {
@@ -262,10 +342,19 @@ impl Debugger {
                 self.cursor = addr as u16;
             }
             Command::Step => {
+                self.repeated_command = Some(command.clone());
                 self.send_and_handle(DebugRequest::Step).unwrap();
-                self.process_command(Command::Disassemble(None))
+                let cursor = self.cursor;
+                self.send_and_handle(DebugRequest::GetDisassembly(Some(cursor), Some(10 as u16))).unwrap()
+            }
+            Command::RevStep => {
+                self.repeated_command = Some(command.clone());
+                self.send_and_handle(DebugRequest::RevStep).unwrap();
+                let cursor = self.cursor;
+                self.send_and_handle(DebugRequest::GetDisassembly(Some(cursor), Some(10 as u16))).unwrap()
             }
             Command::Continue => {
+                self.repeated_command = Some(command.clone());
                 self.send_and_handle(DebugRequest::Continue).unwrap();
             }
             Command::AddBreakpoint(bp) => {
@@ -273,11 +362,18 @@ impl Debugger {
                 let breakpoints_cloned = self.breakpoints.clone();
                 self.send_and_handle(DebugRequest::SetBreakpoints(breakpoints_cloned)).unwrap();
             }
-            Command::ListBreakpoints => {
+            // TODO: Proper printing of breakpoints
+            Command::ListBreakpoints | Command::ListWatchpoints => {
                 for bp in self.breakpoints.as_slice() {
-                    // TODO: Proper printing of breakpoints
                     println!("{:?}", bp);
                 }
+            }
+            Command::ShowMem(addr) => {
+                let cursor = self.cursor as u32;
+                self.send_and_handle(DebugRequest::ReadMem(addr.unwrap_or(cursor) as u16, 0x80)).unwrap()
+            }
+            Command::Repeat => {
+                // Do nothing, as there's nothing to repeat
             }
             c => {
                 println!("Unhandled command {:?}", c)
@@ -314,7 +410,7 @@ pub fn start(message_tx: Sender<ControlMessage>) -> JoinHandle<()> {
         loop {
             let summary = debugger.get_summary().expect("Unable to get debug summary");
 
-            let prompt = format!("(0x{:04x}) {} >", debugger.cursor, summary.cycles);
+            let prompt = format!("(0x{:04x}) {} {} >", debugger.cursor, summary.cycles, summary.instruction_counter);
             if let Ok(line) = rl.readline(prompt.as_str()) {
                 rl.add_history_entry(&line);
                 debugger.process_debug_line(line.as_str())

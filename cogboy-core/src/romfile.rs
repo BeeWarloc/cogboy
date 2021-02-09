@@ -1,11 +1,16 @@
+use std::sync::Mutex;
+use std::collections::HashMap;
 use std::ops::Index;
 use serde::{self, Deserializer, Deserialize, Serializer, Serialize};
 use serde::de::Visitor;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Error as IOError};
 
+lazy_static! {
+    static ref ROM_CACHE: Mutex<HashMap<String, Weak<Vec<u8>>>> = HashMap::new().into() ;
+}
 
 #[derive(Debug, Clone)]
 pub struct RomFile {
@@ -15,6 +20,11 @@ pub struct RomFile {
 
 impl RomFile {
     pub fn load(path: &str) -> Result<RomFile, IOError> {
+        let mut cache = ROM_CACHE.lock().expect("Rom cache couldn't be unlocked, this should not happen");
+        if let Some(Some(bytes)) = cache.get(path).map(|bytes_weak| bytes_weak.upgrade()) {
+            return Ok(RomFile { bytes: bytes, path: path.to_string() });
+        }
+
         let mut f = File::open(path)?;
         let mut bytes: Vec<u8> = Vec::new();
         f.read_to_end(&mut bytes)?;
@@ -23,6 +33,8 @@ impl RomFile {
             bytes[0x148],
             bytes[0x149]);
 
+        let bytes = Arc::new(bytes);
+        cache.insert(path.to_string(),  Arc::downgrade(&bytes));
         Ok(RomFile { bytes: bytes.into(), path: path.to_string() })
     }
 }

@@ -1,4 +1,6 @@
 extern crate serde;
+extern crate bincode;
+extern crate flate2;
 
 #[macro_use]
 extern crate serde_derive;
@@ -7,13 +9,18 @@ extern crate serde_derive;
 extern crate log;
 
 #[macro_use]
+extern crate lazy_static;
+
+#[macro_use]
 extern crate enum_primitive;
 extern crate num;
 
+use zlob::Zlob;
 use std::cmp;
 use std::collections::VecDeque;
 
 mod romfile;
+pub mod zlob;
 pub mod cpu;
 pub mod bus;
 pub mod cartridge;
@@ -22,17 +29,27 @@ pub mod lcd;
 
 use self::cpu::Cpu;
 
+
 #[derive(Clone,Copy,Debug)]
 pub struct EventEntry {
-    time: u64,
-    joypad: u8
+    pub time: u64,
+    pub joypad: u8
 }
 
 #[derive(Clone)]
 pub struct System {
     pub cpu: Box<Cpu>,
-    passed_events: Vec<EventEntry>,
-    pending_events: VecDeque<EventEntry>,
+    pub passed_events: Vec<EventEntry>,
+    pub pending_events: VecDeque<EventEntry>,
+    pub snapshots: Vec<(u64, Zlob<Cpu>)>
+}
+
+
+pub trait RunContext {
+    fn check_watchpoint(&mut self, addr: u16, value: u8);
+
+    #[inline]
+    fn after_step(&mut self, _cpu: &Cpu, _passed_cycles: usize) -> bool { false }
 }
 
 impl System {
@@ -40,7 +57,22 @@ impl System {
         System {
             cpu: Box::new(Cpu::new(path)),
             passed_events: Vec::new(),
-            pending_events: VecDeque::new()
+            pending_events: VecDeque::new(),
+            snapshots: Vec::new(),
+        }
+    }
+
+    pub fn cycles_since_last_snapshot(&self) -> u64 {
+        self.cpu.cycles.saturating_sub(self.snapshots.iter().last().map(|x| x.0).unwrap_or(0))
+    }
+
+    pub fn update_joypad(&mut self, buttons: u8) {
+        if self.cpu.bus.io.joypad_all_buttons != buttons {
+            if self.pending_events.len() > 0 {
+                println!("Overriding pending events!");
+                self.pending_events.clear();
+            }
+            self.pending_events.push_front(EventEntry { time: self.cpu.cycles, joypad: buttons });
         }
     }
 
@@ -48,11 +80,55 @@ impl System {
         self.cpu.bus.io.serial_out.drain(..).map(|x| x as char).collect::<String>()
     }
 
-    pub fn run_to_cycle(&mut self, target_cycles: u64) {
-        if self.cpu.cycles > target_cycles {
-            panic!("Rewinding not yet supported");
+    pub fn snapshots_size(&self) -> usize {
+        self.snapshots.iter().map(|(_, snapshot)| snapshot.size()).sum()
+    }
+
+    pub fn rewind_to_closest_snapshot(&mut self, target_cycle: u64) {
+        if target_cycle >= self.cpu.cycles {
+            return;
         }
-        while self.cpu.cycles <= target_cycles {
+
+        println!("Rewinding {} cycles to {}", self.cpu.cycles - target_cycle, target_cycle);
+        
+        let mut closest_snapshot = None;
+
+        println!("    there are {} snapshots to pick from", self.snapshots.len());
+        while let Some((snapshot_cycle, snapshot)) = self.snapshots.pop() {
+            if target_cycle >= snapshot_cycle {
+                closest_snapshot = Box::new(snapshot.deserialize()).into();
+                // Push the used snapshot back in place
+                self.snapshots.push((snapshot_cycle, snapshot));
+                break;
+            }
+        }
+        match closest_snapshot {
+            Some(snapshot) => {
+                println!("   closest snapshot is at cycle {}, which means we must forward {} cycles", snapshot.cycles, target_cycle - snapshot.cycles);
+                self.cpu = snapshot;
+            }
+            None => {
+                self.cpu.reset();
+            }
+        }
+        while let Some(ev) = self.passed_events.pop() {
+            if ev.time > self.cpu.cycles {
+                self.pending_events.push_front(ev)
+            } else {
+                self.passed_events.push(ev);
+                break
+            }
+        }
+    }
+
+    pub fn run_to_cycle(&mut self, target_cycle: u64, ctx: &mut impl RunContext) {
+        if self.cpu.cycles == target_cycle {
+            return;
+        }
+
+        self.rewind_to_closest_snapshot(target_cycle);
+        
+        'outer: while self.cpu.cycles < target_cycle {
             while let Some(ev) = self.pending_events.pop_front() {
                 if ev.time > self.cpu.cycles {
                     self.pending_events.push_front(ev);
@@ -62,29 +138,25 @@ impl System {
                 self.passed_events.push(ev);
             }
 
-            let next_event_cycle = cmp::min(target_cycles, self.pending_events.front().map(|ev| ev.time).unwrap_or(std::u64::MAX));
+            let next_event_cycle = cmp::min(target_cycle, self.pending_events.front().map(|ev| ev.time).unwrap_or(std::u64::MAX));
 
             while self.cpu.cycles <= next_event_cycle {  
-                // let pre_cycles = self.cpu.cycles;
-
-                self.cpu.step().unwrap();
-
-                /*
-                if pre_cycles < self.break_cycle && self.cpu.cycles >= self.break_cycle {
-                    println!("At or passed break cycle {}, breaking at {}", self.break_cycle, self.cpu.cycles);
-                    self.pause();
-                    break;
+                let passed_cycles = self.cpu.step(ctx).unwrap();
+                if ctx.after_step(&self.cpu, passed_cycles) {
+                    break 'outer
                 }
-                if self.breakpoints.contains(&self.cpu.regs.pc) {
-                    println!("At breakpoint!");
-                    self.pause();
-                    break;
-                }
-                */
             }
             // trace!("Cpu state {}: {:?} IME {} IE {:05b} {:05b}", cpu.cycles, cpu.regs, cpu.interrupts_enabled,
             //       cpu.bus.io.interrupt_enable, cpu.bus.io.interrupt_flags );;
         }
+    }
+
+    pub fn take_snapshot(&mut self) {
+        let snapshot: Zlob<Cpu> = self.cpu.as_ref().into();
+        // if let Some(&(_, ref prev_snapshot)) = self.snapshots.iter().last() {
+        //     println!("Different bytes from last snapshot: {}", prev_snapshot.count_diff_bytes(&snapshot))
+        // }
+        self.snapshots.push((self.cpu.cycles, snapshot))
     }
 }
 

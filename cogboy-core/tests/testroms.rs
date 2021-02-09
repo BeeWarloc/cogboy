@@ -1,19 +1,25 @@
 extern crate cogboy_core;
 
-use cogboy_core::System;
+use cogboy_core::{System, RunContext};
+
+struct TestContext;
+impl RunContext for TestContext {
+    fn check_watchpoint(&mut self, _addr: u16, _value: u8) {}
+}
 
 fn run_test_rom(path: &str) {
     let mut system = System::new(path);
     let mut log = String::new();
+    let mut ctx = TestContext;
     while system.cpu.cycles < 100_000_000 {
         let target_cycles = system.cpu.cycles + 100_000;
-        system.run_to_cycle(target_cycles);
+        system.run_to_cycle(target_cycles, &mut ctx);
         let serial_out = system.drain_serial_out();
         log.push_str(serial_out.as_str());
         if log.contains("Passed") || log.contains("Failed") {
             // Run a little more just to make sure to get the serial bytes after "Failed" out
             let target_cycles = system.cpu.cycles + 100_000;
-            system.run_to_cycle(target_cycles);
+            system.run_to_cycle(target_cycles, &mut ctx);
             break;
         }
     }

@@ -10,4 +10,6 @@ num = "*"
 log = "*"
 serde = "1.0"
 serde_derive = "1.0"
-
+bincode = "1"
+lazy_static = "1.0"
+flate2 = "1.0"

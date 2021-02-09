@@ -4,7 +4,7 @@ use std::io;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cartridge {
-    rom: RomFile,
+    pub rom: RomFile,
     ram: Vec<u8>,
     pub rom_bank: u8,
     ram_enabled: bool, // ram_bank: u8
@@ -41,6 +41,12 @@ impl Cartridge {
         };
 
         Ok(cart)
+    }
+
+    pub fn clear_ram(&mut self) {
+        for i in 0..self.ram.len() {
+            self.ram[i] = 0
+        }
     }
 
     pub fn read(&self, addr: u16) -> u8 {
