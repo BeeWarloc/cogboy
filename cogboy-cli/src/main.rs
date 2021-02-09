@@ -12,19 +12,19 @@ extern crate env_logger;
 
 extern crate cogboy_core;
 
-use cogboy_core::System;
-use cogboy_core::RunContext;
 use cogboy_core::cpu::Cpu;
+use cogboy_core::RunContext;
+use cogboy_core::System;
 
 mod audio_driver;
 mod debugger;
 
 mod command;
 
-use std::thread;
-use std::thread::JoinHandle;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
+use std::thread;
+use std::thread::JoinHandle;
 
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -37,7 +37,6 @@ use minifb::{Key, KeyRepeat, Scale, ScaleMode, Window, WindowOptions};
 const LCD_WIDTH: usize = 160;
 const LCD_HEIGHT: usize = 144;
 
-
 struct GameboyThread {
     gfx_rx: Receiver<Vec<u8>>,
     snd_rx: Receiver<SoundMessage>,
@@ -47,7 +46,7 @@ struct GameboyThread {
 pub enum SoundMessage {
     Play,
     Pause,
-    Buffer(Vec<(i8,i8)>)
+    Buffer(Vec<(i8, i8)>),
 }
 
 pub enum ControlMessage {
@@ -61,7 +60,7 @@ pub enum ControlMessage {
     LcdToggleBackground,
     LcdToggleSprites,
     LcdToggleWindow,
-    Quit
+    Quit,
 }
 
 pub struct Gameboy {
@@ -96,15 +95,21 @@ impl<'a> RunContext for GameboyRunContext<'a> {
     fn after_step(&mut self, cpu: &Cpu, passed_cycles: usize) -> bool {
         let pre_cycles = cpu.cycles - passed_cycles as u64;
         if pre_cycles < self.break_cycle && cpu.cycles >= self.break_cycle {
-            println!("At or passed break cycle {}, breaking at {}", self.break_cycle, cpu.cycles);
-            return true
+            println!(
+                "At or passed break cycle {}, breaking at {}",
+                self.break_cycle, cpu.cycles
+            );
+            return true;
         }
         if self.breakpoints.contains(&cpu.regs.pc) {
             println!("At breakpoint!");
-            return true
+            return true;
         }
         if let Some((watchpoint_addr, value)) = self.watchpoint_triggered {
-            println!("Watchpoint hit: {:02x} written to {:04x}, breaking at cycle {}", value, watchpoint_addr, cpu.cycles);
+            println!(
+                "Watchpoint hit: {:02x} written to {:04x}, breaking at cycle {}",
+                value, watchpoint_addr, cpu.cycles
+            );
             self.watchpoint_triggered = None;
             return true;
         }
@@ -131,20 +136,21 @@ impl Gameboy {
 
     fn event_loop(&mut self) {
         loop {
-            let message =
-                if self.limit_speed {
-                    self.message_rx.recv().expect("Failed while receiving message")
-                } else {
-                    self.message_rx.try_recv().unwrap_or(ControlMessage::Tick(9000))
-                };
+            let message = if self.limit_speed {
+                self.message_rx
+                    .recv()
+                    .expect("Failed while receiving message")
+            } else {
+                self.message_rx
+                    .try_recv()
+                    .unwrap_or(ControlMessage::Tick(9000))
+            };
 
             match message {
                 ControlMessage::Tick(cycles) => {
                     self.target_cycles += cycles as u64;
                 }
-                ControlMessage::Joypad(buttons) => {
-                    self.system.update_joypad(buttons)
-                }
+                ControlMessage::Joypad(buttons) => self.system.update_joypad(buttons),
                 ControlMessage::ToggleSpeedLimit => {
                     self.limit_speed = !self.limit_speed;
                 }
@@ -170,16 +176,15 @@ impl Gameboy {
                 ControlMessage::LcdToggleWindow => {
                     self.system.cpu.bus.lcd.show_window = !self.system.cpu.bus.lcd.show_window;
                 }
-                ControlMessage::Quit => break
+                ControlMessage::Quit => break,
             }
 
             if self.running {
-                let target_cycles =
-                    if self.system.cpu.cycles > self.break_cycle {
-                        self.target_cycles
-                    } else {
-                        cmp::min(self.target_cycles, self.break_cycle)
-                    };
+                let target_cycles = if self.system.cpu.cycles > self.break_cycle {
+                    self.target_cycles
+                } else {
+                    cmp::min(self.target_cycles, self.break_cycle)
+                };
 
                 let mut ctx = GameboyRunContext {
                     watchpoints: &self.watchpoints,
@@ -194,11 +199,12 @@ impl Gameboy {
                     let samples = self.system.cpu.bus.dequeue_samples();
 
                     if self.limit_speed {
-                        self.snd_tx.send(SoundMessage::Buffer(samples)).expect("Sound output channel closed");
+                        self.snd_tx
+                            .send(SoundMessage::Buffer(samples))
+                            .expect("Sound output channel closed");
                     }
                 }
             }
-
 
             /*
 
@@ -206,18 +212,25 @@ impl Gameboy {
                 let s = ((s as i8) as f32) * u8::max_value() as f32;
                 snd_tx.send(s).unwrap();
             }*/
-            
+
             match self.system.cpu.bus.lcd.try_get_buffer() {
                 Some(buffer) => {
                     // Snapshot here periodically for back stepping
-                    if self.system.cycles_since_last_snapshot() > cogboy_core::constants::CPU_FREQ as u64 {
+                    if self.system.cycles_since_last_snapshot()
+                        > cogboy_core::constants::CPU_FREQ as u64
+                    {
                         self.system.take_snapshot();
-                        println!("NOCOMMIT!!!! SNAPSHOT SAVED!!! total size of snapshot store is {}KiB", (self.system.snapshots_size() as f64) / 1024.0);
+                        println!(
+                            "NOCOMMIT!!!! SNAPSHOT SAVED!!! total size of snapshot store is {}KiB",
+                            (self.system.snapshots_size() as f64) / 1024.0
+                        );
                     }
                     //self.history.push(self.cpu.clone().into());
-                    self.gfx_tx.send(buffer).expect("Graphics output channel closed");
+                    self.gfx_tx
+                        .send(buffer)
+                        .expect("Graphics output channel closed");
                 }
-                _ => ()
+                _ => (),
             }
         }
     }
@@ -260,38 +273,31 @@ fn map_buttons(window: &mut Window) -> u8 {
         0
     } else {
         1 << 0
-    } |
-    if window.is_key_down(Key::Left) {
+    } | if window.is_key_down(Key::Left) {
         0
     } else {
         1 << 1
-    } |
-    if window.is_key_down(Key::Up) {
+    } | if window.is_key_down(Key::Up) {
         0
     } else {
         1 << 2
-    } |
-    if window.is_key_down(Key::Down) {
+    } | if window.is_key_down(Key::Down) {
         0
     } else {
         1 << 3
-    } |
-    if window.is_key_down(Key::S) {
+    } | if window.is_key_down(Key::S) {
         0
     } else {
         1 << 4
-    } |
-    if window.is_key_down(Key::A) {
+    } | if window.is_key_down(Key::A) {
         0
     } else {
         1 << 5
-    } |
-    if window.is_key_down(Key::Z) {
+    } | if window.is_key_down(Key::Z) {
         0
     } else {
         1 << 6
-    } |
-    if window.is_key_down(Key::Enter) {
+    } | if window.is_key_down(Key::Enter) {
         0
     } else {
         1 << 7
@@ -300,22 +306,24 @@ fn map_buttons(window: &mut Window) -> u8 {
 }
 
 fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<u8>>) {
-    let mut window = Window::new("Test - ESC to exit",
-                                 160,
-                                 144,
-                                 WindowOptions {
-                                     borderless: false,
-                                     title: true,
-                                     resize: true,
-                                     scale: Scale::X1,
-                                     scale_mode: ScaleMode::Stretch,
-                                     topmost: true,
-                                     transparency: false,
-                                     none: false,
-                                 })
-        .unwrap_or_else(|e| {
-            panic!("{}", e);
-        });
+    let mut window = Window::new(
+        "Test - ESC to exit",
+        160,
+        144,
+        WindowOptions {
+            borderless: false,
+            title: true,
+            resize: true,
+            scale: Scale::X1,
+            scale_mode: ScaleMode::Stretch,
+            topmost: true,
+            transparency: false,
+            none: false,
+        },
+    )
+    .unwrap_or_else(|e| {
+        panic!("{}", e);
+    });
 
     let palette: [u32; 4] = [0xff9cbd0f, 0xff8cad0f, 0xff306230, 0xff0f380f];
     let mut buffer = vec![0u32; LCD_WIDTH * LCD_HEIGHT];
@@ -331,7 +339,6 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
     let mut last_buttons = 0xffu8;
 
     'outer: while window.is_open() && !window.is_key_down(Key::Escape) {
-
         let mut frame_received = false;
         loop {
             match gfx_rx.try_recv() {
@@ -344,18 +351,25 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
                     }
                     frame_received = true;
                 }
-                Err(mpsc::TryRecvError::Disconnected) =>
-                {
+                Err(mpsc::TryRecvError::Disconnected) => {
                     break 'outer;
                 }
-                _ => break
+                _ => break,
             }
         }
 
-        window.update_with_buffer(&buffer, LCD_WIDTH, LCD_HEIGHT).unwrap();
+        window
+            .update_with_buffer(&buffer, LCD_WIDTH, LCD_HEIGHT)
+            .unwrap();
 
         if window.is_key_pressed(Key::P, KeyRepeat::No) {
-            message_tx.send(if paused { ControlMessage::Play } else { ControlMessage::Pause }).unwrap();
+            message_tx
+                .send(if paused {
+                    ControlMessage::Play
+                } else {
+                    ControlMessage::Pause
+                })
+                .unwrap();
             paused = !paused;
             continue;
         }
@@ -369,7 +383,9 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
         }
 
         if window.is_key_pressed(Key::Key8, KeyRepeat::No) {
-            message_tx.send(ControlMessage::LcdToggleBackground).unwrap();
+            message_tx
+                .send(ControlMessage::LcdToggleBackground)
+                .unwrap();
         }
 
         if window.is_key_pressed(Key::Key9, KeyRepeat::No) {

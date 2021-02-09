@@ -1,5 +1,5 @@
-use std::mem;
 use std::cmp;
+use std::mem;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sound {
@@ -154,19 +154,22 @@ impl SquareGenerator {
     fn read(&self, addr: u16) -> u8 {
         (match addr {
             0 => {
-                self.sweep_period << 4 |
-                match self.sweep_direction {
-                    -1 => 0x08,
-                    _ => 0,
-                } | self.sweep_shift | 0x80
+                self.sweep_period << 4
+                    | match self.sweep_direction {
+                        -1 => 0x08,
+                        _ => 0,
+                    }
+                    | self.sweep_shift
+                    | 0x80
             }
             1 => (self.duty_number << 6) | 0x3f,
             2 => {
-                (self.start_volume << 4) |
-                match self.envelope_direction {
-                    -1 => 0,
-                    _ => 0x08,
-                } | (self.envelope_period & 0x07)
+                (self.start_volume << 4)
+                    | match self.envelope_direction {
+                        -1 => 0,
+                        _ => 0x08,
+                    }
+                    | (self.envelope_period & 0x07)
             }
             3 => 0xff, // Write only
             4 => 0xbf | if self.length_enabled { 0x40 } else { 0 },
@@ -179,8 +182,8 @@ impl SquareGenerator {
     }
 
     fn calc_next_frequency(&self) -> Option<i32> {
-        let next_frequency = self.shadow_frequency +
-                             (self.shadow_frequency >> self.sweep_shift) * self.sweep_direction;
+        let next_frequency = self.shadow_frequency
+            + (self.shadow_frequency >> self.sweep_shift) * self.sweep_direction;
         if next_frequency > 2047 || next_frequency < 0 {
             None
         } else {

@@ -1,4 +1,3 @@
-﻿
 use std::mem;
 
 use super::constants::*;
@@ -35,7 +34,7 @@ pub struct Lcd {
 
     pub show_bg: bool,
     pub show_sprites: bool,
-    pub show_window: bool
+    pub show_window: bool,
 }
 
 #[derive(Debug)]
@@ -66,7 +65,6 @@ impl SpriteOamEntry {
     fn get_x(&self) -> i32 {
         self.x as i32 - 8
     }
-
 
     fn covers_line(&self, sprite_height: i32, line_y: i32) -> bool {
         let sprite_y = self.get_y();
@@ -99,7 +97,7 @@ impl Lcd {
             wy_counter: 0,
             show_bg: true,
             show_sprites: true,
-            show_window: true
+            show_window: true,
         };
         lcd.set_mode(LcdMode::Hblank);
         lcd
@@ -156,7 +154,10 @@ impl Lcd {
     pub fn try_get_buffer(&mut self) -> Option<Vec<u8>> {
         if self.vblank_sync {
             self.vblank_sync = false;
-            Some(mem::replace(&mut self.last_frame, vec![0u8; LCD_WIDTH * LCD_HEIGHT]))
+            Some(mem::replace(
+                &mut self.last_frame,
+                vec![0u8; LCD_WIDTH * LCD_HEIGHT],
+            ))
         } else {
             None
         }
@@ -229,7 +230,11 @@ impl Lcd {
     }
 
     fn get_sprite_height(&self) -> i32 {
-        if (self.lcdc & LCDC_SPRITES_SIZE) == 0 { 8 } else { 16 }
+        if (self.lcdc & LCDC_SPRITES_SIZE) == 0 {
+            8
+        } else {
+            16
+        }
     }
 
     fn get_oam_entries(&self, line_y: i32) -> Vec<SpriteOamEntry> {
@@ -241,16 +246,16 @@ impl Lcd {
             .filter(|entry| entry.covers_line(sprite_height, line_y))
             .collect();
 
-
         // TODO: Also sort by OAM table ordering, see http://bgb.bircd.org/pandocs.htm#vramspriteattributetableoam
         // TODO: Maybe the ordering is reverse from how it should be here, since the first sprite gets overdrawn by the last?
-        entries.sort_unstable_by_key(|entry| ((((entry.x as usize) << 16) | entry.index as usize) as isize));
+        entries.sort_unstable_by_key(|entry| {
+            ((((entry.x as usize) << 16) | entry.index as usize) as isize)
+        });
         if entries.len() > 10 {
             entries.truncate(10);
         }
         entries
     }
-
 
     fn draw_sprites(&mut self, line_y: i32) {
         let sprite_height = self.get_sprite_height();
@@ -355,10 +360,10 @@ impl Lcd {
             0x400
         };
 
-        let tile_id = self.vram_tile_table[tile_base + (((y & 0xf8) as usize) << 2) +
-                                           ((x as usize) >> 3)];
-        let palette_idx = self.vram_tile_data[self.get_bg_tile_offset(tile_id) +
-                                              (((y & 0x7) << 3) | (x & 0x7)) as usize];
+        let tile_id =
+            self.vram_tile_table[tile_base + (((y & 0xf8) as usize) << 2) + ((x as usize) >> 3)];
+        let palette_idx = self.vram_tile_data
+            [self.get_bg_tile_offset(tile_id) + (((y & 0x7) << 3) | (x & 0x7)) as usize];
         // let line_offset = self.get_bg_tile_offset(tile_id) + ((y & 0x7) * 2) as usize;
         // let l0 = self.read_vram_tile_data(line_offset as u16 + MEM_LCD_VRAM_TILE_DATA_START);
         // let l1 = self.read_vram_tile_data(line_offset as u16 + 1 + MEM_LCD_VRAM_TILE_DATA_START);
@@ -376,10 +381,10 @@ impl Lcd {
             0x400
         };
 
-        let tile_id = self.vram_tile_table[tile_base + (((y & 0xf8) as usize) << 2) +
-                                           ((x as usize) >> 3)];
-        let palette_idx = self.vram_tile_data[self.get_bg_tile_offset(tile_id) +
-                                              (((y & 0x7) << 3) | (x & 0x7)) as usize];
+        let tile_id =
+            self.vram_tile_table[tile_base + (((y & 0xf8) as usize) << 2) + ((x as usize) >> 3)];
+        let palette_idx = self.vram_tile_data
+            [self.get_bg_tile_offset(tile_id) + (((y & 0x7) << 3) | (x & 0x7)) as usize];
         // let line_offset = self.get_bg_tile_offset(tile_id) + ((y & 0x7) * 2) as usize;
         // let l0 = self.read_vram_tile_data(line_offset as u16 + MEM_LCD_VRAM_TILE_DATA_START);
         // let l1 = self.read_vram_tile_data(line_offset as u16 + 1 + MEM_LCD_VRAM_TILE_DATA_START);
@@ -405,7 +410,6 @@ impl Lcd {
         if cycles > max_step {
             return self.tick(max_step) | self.tick(cycles - max_step);
         }
-
 
         let mut ints = 0u8;
         self.counter -= cycles as i32;
@@ -465,8 +469,10 @@ impl Lcd {
         if self.show_window {
             if self.is_window_enabled() && y >= self.wy {
                 for x in (self.wx.saturating_sub(7) as usize)..LCD_WIDTH {
-                    self.buffer[offset + x] =
-                        self.get_window_at((x as u8).wrapping_sub(self.wx.wrapping_sub(7)), self.wy_counter);
+                    self.buffer[offset + x] = self.get_window_at(
+                        (x as u8).wrapping_sub(self.wx.wrapping_sub(7)),
+                        self.wy_counter,
+                    );
                 }
                 self.wy_counter += 1;
             }
@@ -476,4 +482,3 @@ impl Lcd {
         }
     }
 }
-

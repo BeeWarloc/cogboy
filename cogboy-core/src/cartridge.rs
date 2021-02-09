@@ -56,11 +56,13 @@ impl Cartridge {
                 // TODO bound checking for invalid ROM BANK select, or maybe mask?
                 let offset = addr as usize + ((self.rom_bank as usize - 1) * 0x4000) as usize;
                 let value = self.rom[offset];
-                trace!("Reading value {:02x} from addr ROM{}:{:04x} at rom offset 0x{:04x}",
-                       value,
-                       self.rom_bank,
-                       addr,
-                       offset);
+                trace!(
+                    "Reading value {:02x} from addr ROM{}:{:04x} at rom offset 0x{:04x}",
+                    value,
+                    self.rom_bank,
+                    addr,
+                    offset
+                );
                 value
             }
             0xa000..=0xbfff => {

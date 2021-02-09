@@ -1,6 +1,6 @@
-extern crate serde;
 extern crate bincode;
 extern crate flate2;
+extern crate serde;
 
 #[macro_use]
 extern crate serde_derive;
@@ -15,25 +15,24 @@ extern crate lazy_static;
 extern crate enum_primitive;
 extern crate num;
 
-use zlob::Zlob;
 use std::cmp;
 use std::collections::VecDeque;
+use zlob::Zlob;
 
-mod romfile;
-pub mod zlob;
-pub mod cpu;
 pub mod bus;
 pub mod cartridge;
-pub mod sound;
+pub mod cpu;
 pub mod lcd;
+mod romfile;
+pub mod sound;
+pub mod zlob;
 
 use self::cpu::Cpu;
 
-
-#[derive(Clone,Copy,Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct EventEntry {
     pub time: u64,
-    pub joypad: u8
+    pub joypad: u8,
 }
 
 #[derive(Clone)]
@@ -41,15 +40,16 @@ pub struct System {
     pub cpu: Box<Cpu>,
     pub passed_events: Vec<EventEntry>,
     pub pending_events: VecDeque<EventEntry>,
-    pub snapshots: Vec<(u64, Zlob<Cpu>)>
+    pub snapshots: Vec<(u64, Zlob<Cpu>)>,
 }
-
 
 pub trait RunContext {
     fn check_watchpoint(&mut self, addr: u16, value: u8);
 
     #[inline]
-    fn after_step(&mut self, _cpu: &Cpu, _passed_cycles: usize) -> bool { false }
+    fn after_step(&mut self, _cpu: &Cpu, _passed_cycles: usize) -> bool {
+        false
+    }
 }
 
 impl System {
@@ -63,7 +63,9 @@ impl System {
     }
 
     pub fn cycles_since_last_snapshot(&self) -> u64 {
-        self.cpu.cycles.saturating_sub(self.snapshots.iter().last().map(|x| x.0).unwrap_or(0))
+        self.cpu
+            .cycles
+            .saturating_sub(self.snapshots.iter().last().map(|x| x.0).unwrap_or(0))
     }
 
     pub fn update_joypad(&mut self, buttons: u8) {
@@ -72,16 +74,28 @@ impl System {
                 println!("Overriding pending events!");
                 self.pending_events.clear();
             }
-            self.pending_events.push_front(EventEntry { time: self.cpu.cycles, joypad: buttons });
+            self.pending_events.push_front(EventEntry {
+                time: self.cpu.cycles,
+                joypad: buttons,
+            });
         }
     }
 
     pub fn drain_serial_out(&mut self) -> String {
-        self.cpu.bus.io.serial_out.drain(..).map(|x| x as char).collect::<String>()
+        self.cpu
+            .bus
+            .io
+            .serial_out
+            .drain(..)
+            .map(|x| x as char)
+            .collect::<String>()
     }
 
     pub fn snapshots_size(&self) -> usize {
-        self.snapshots.iter().map(|(_, snapshot)| snapshot.size()).sum()
+        self.snapshots
+            .iter()
+            .map(|(_, snapshot)| snapshot.size())
+            .sum()
     }
 
     pub fn rewind_to_closest_snapshot(&mut self, target_cycle: u64) {
@@ -89,11 +103,18 @@ impl System {
             return;
         }
 
-        println!("Rewinding {} cycles to {}", self.cpu.cycles - target_cycle, target_cycle);
-        
+        println!(
+            "Rewinding {} cycles to {}",
+            self.cpu.cycles - target_cycle,
+            target_cycle
+        );
+
         let mut closest_snapshot = None;
 
-        println!("    there are {} snapshots to pick from", self.snapshots.len());
+        println!(
+            "    there are {} snapshots to pick from",
+            self.snapshots.len()
+        );
         while let Some((snapshot_cycle, snapshot)) = self.snapshots.pop() {
             if target_cycle >= snapshot_cycle {
                 closest_snapshot = Box::new(snapshot.deserialize()).into();
@@ -104,7 +125,11 @@ impl System {
         }
         match closest_snapshot {
             Some(snapshot) => {
-                println!("   closest snapshot is at cycle {}, which means we must forward {} cycles", snapshot.cycles, target_cycle - snapshot.cycles);
+                println!(
+                    "   closest snapshot is at cycle {}, which means we must forward {} cycles",
+                    snapshot.cycles,
+                    target_cycle - snapshot.cycles
+                );
                 self.cpu = snapshot;
             }
             None => {
@@ -116,7 +141,7 @@ impl System {
                 self.pending_events.push_front(ev)
             } else {
                 self.passed_events.push(ev);
-                break
+                break;
             }
         }
     }
@@ -127,23 +152,29 @@ impl System {
         }
 
         self.rewind_to_closest_snapshot(target_cycle);
-        
+
         'outer: while self.cpu.cycles < target_cycle {
             while let Some(ev) = self.pending_events.pop_front() {
                 if ev.time > self.cpu.cycles {
                     self.pending_events.push_front(ev);
                     break;
                 }
-                self.cpu.bus.io.joypad_all_buttons = ev.joypad; 
+                self.cpu.bus.io.joypad_all_buttons = ev.joypad;
                 self.passed_events.push(ev);
             }
 
-            let next_event_cycle = cmp::min(target_cycle, self.pending_events.front().map(|ev| ev.time).unwrap_or(std::u64::MAX));
+            let next_event_cycle = cmp::min(
+                target_cycle,
+                self.pending_events
+                    .front()
+                    .map(|ev| ev.time)
+                    .unwrap_or(std::u64::MAX),
+            );
 
-            while self.cpu.cycles <= next_event_cycle {  
+            while self.cpu.cycles <= next_event_cycle {
                 let passed_cycles = self.cpu.step(ctx).unwrap();
                 if ctx.after_step(&self.cpu, passed_cycles) {
-                    break 'outer
+                    break 'outer;
                 }
             }
             // trace!("Cpu state {}: {:?} IME {} IE {:05b} {:05b}", cpu.cycles, cpu.regs, cpu.interrupts_enabled,
@@ -217,4 +248,3 @@ pub mod constants {
     pub const INT_JOYPAD: usize = 4;
     pub const INT_MASK_JOYPAD: u8 = 1u8 << INT_JOYPAD;
 }
-

@@ -1,9 +1,9 @@
-use crate::RunContext;
-use std::fmt;
 use super::bus::Bus;
 use super::cartridge::Cartridge;
+use crate::RunContext;
+use std::fmt;
 
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Regs {
     pub a: u8, // accumulator
     pub f: u8, // flags
@@ -23,23 +23,25 @@ pub struct Regs {
 
 impl fmt::Debug for Regs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f,
-               "Regs {{ AF {:02x}{:02x} BC {:02x}{:02x} DE {:02x}{:02x} HL {:02x}{:02x} SP {:04x} \
+        write!(
+            f,
+            "Regs {{ AF {:02x}{:02x} BC {:02x}{:02x} DE {:02x}{:02x} HL {:02x}{:02x} SP {:04x} \
                 PC {:04x} Z{}N{}H{}C{} }}",
-               self.a,
-               self.f,
-               self.b,
-               self.c,
-               self.d,
-               self.e,
-               self.h,
-               self.l,
-               self.sp,
-               self.pc,
-               self.f >> 7,
-               (self.f >> 6) & 1,
-               (self.f >> 5) & 1,
-               (self.f >> 4) & 1)
+            self.a,
+            self.f,
+            self.b,
+            self.c,
+            self.d,
+            self.e,
+            self.h,
+            self.l,
+            self.sp,
+            self.pc,
+            self.f >> 7,
+            (self.f >> 6) & 1,
+            (self.f >> 5) & 1,
+            (self.f >> 4) & 1
+        )
     }
 }
 
@@ -58,7 +60,6 @@ impl Regs {
             pc: 0x100,
         }
     }
-
 
     fn write_reg16(&mut self, reg: OpcodeRegister16, value: u16) {
         match reg {
@@ -160,15 +161,15 @@ impl fmt::Display for OpcodeOperand8 {
             &OpcodeOperand8::E => write!(f, "e"),
             &OpcodeOperand8::H => write!(f, "h"),
             &OpcodeOperand8::L => write!(f, "l"),
-            &OpcodeOperand8::RefBC=> write!(f, "(bc)"),
-            &OpcodeOperand8::RefDE=> write!(f, "(de)"),
-            &OpcodeOperand8::RefHL=> write!(f, "(hl)"),
-            &OpcodeOperand8::RefHLInc=> write!(f, "(hl+)"),
-            &OpcodeOperand8::RefHLDec=> write!(f, "(hl-)"),
+            &OpcodeOperand8::RefBC => write!(f, "(bc)"),
+            &OpcodeOperand8::RefDE => write!(f, "(de)"),
+            &OpcodeOperand8::RefHL => write!(f, "(hl)"),
+            &OpcodeOperand8::RefHLInc => write!(f, "(hl+)"),
+            &OpcodeOperand8::RefHLDec => write!(f, "(hl-)"),
             &OpcodeOperand8::RefImmAddr(addr) => write!(f, "(${:04x})", addr),
             &OpcodeOperand8::Imm(value) => write!(f, "${:02x}", value),
             &OpcodeOperand8::RefUpperImmOffset(offset) => write!(f, "($ff00 + ${:02x})", offset),
-            &OpcodeOperand8::RefUpperCOffset => write!(f, "(0xff00 + c)")
+            &OpcodeOperand8::RefUpperCOffset => write!(f, "(0xff00 + c)"),
         }
     }
 }
@@ -222,7 +223,7 @@ impl fmt::Display for OpcodeCondition {
             OpcodeCondition::Nz => write!(f, "nz"),
             OpcodeCondition::C => write!(f, "c"),
             OpcodeCondition::Nc => write!(f, "nc"),
-            OpcodeCondition::None => write!(f, "")
+            OpcodeCondition::None => write!(f, ""),
         }
     }
 }
@@ -304,30 +305,22 @@ impl fmt::Display for Instruction {
             Instruction::Pop(op) => write!(f, "pop {}", op),
             Instruction::Ld(_, dst, src) => write!(f, "ld {}, {}", dst, src),
             Instruction::Ld16(_, dst, src) => write!(f, "ld {}, {}", dst, src),
-            Instruction::Jr(cond, offset) => {
-                match cond {
-                    OpcodeCondition::None => write!(f, "jr {:+}", offset),
-                    _ => write!(f, "jr {}, {:+}", cond, offset)
-                }
-            }
-            Instruction::Ret(cond) => {
-                match cond {
-                    OpcodeCondition::None => write!(f, "ret"),
-                    _ => write!(f, "ret {}", cond)
-                }
-            }
-            Instruction::Call(cond, addr) => {
-                match cond {
-                    OpcodeCondition::None => write!(f, "call ${:04x}", addr),
-                    _ => write!(f, "call {}, ${:04x}", cond, addr)
-                }
-            }
-            Instruction::Jp(_, cond, op) => {
-                match cond {
-                    OpcodeCondition::None => write!(f, "jp {}", op),
-                    _ => write!(f, "jp {}, {}", cond, op)
-                }
-            }
+            Instruction::Jr(cond, offset) => match cond {
+                OpcodeCondition::None => write!(f, "jr {:+}", offset),
+                _ => write!(f, "jr {}, {:+}", cond, offset),
+            },
+            Instruction::Ret(cond) => match cond {
+                OpcodeCondition::None => write!(f, "ret"),
+                _ => write!(f, "ret {}", cond),
+            },
+            Instruction::Call(cond, addr) => match cond {
+                OpcodeCondition::None => write!(f, "call ${:04x}", addr),
+                _ => write!(f, "call {}, ${:04x}", cond, addr),
+            },
+            Instruction::Jp(_, cond, op) => match cond {
+                OpcodeCondition::None => write!(f, "jp {}", op),
+                _ => write!(f, "jp {}, {}", cond, op),
+            },
             Instruction::Inc16(op) => write!(f, "inc {}", op),
             Instruction::Dec16(op) => write!(f, "dec {}", op),
             Instruction::Daa => write!(f, "daa"),
@@ -355,7 +348,6 @@ impl fmt::Display for Instruction {
             Instruction::Bit(op, bit_offset) => write!(f, "bit {}, {}", bit_offset, op),
             Instruction::Set(op, bit_offset) => write!(f, "set {}, {}", bit_offset, op),
             Instruction::Res(op, bit_offset) => write!(f, "res {}, {}", bit_offset, op),
-
             // inst => write!(f, "{:?}", inst)
         }
     }
@@ -427,212 +419,249 @@ impl Instruction {
             INST_TIMINGS[opcode as usize] * 4
         };
         match opcode {
-                // LD r,r`
-                // c if c & 0b1100_0000u8 == 0b0100_0000 {
-                // let dst = OpcodeRegister::decode(c, 3);
-                // let src =
-                // }
-                0x00 => Ok(Instruction::Nop),
-                0x07 => Ok(Instruction::Rlca),
-                0x08 => {
-                    Ok(Instruction::Ld16(3,
-                                         OpcodeOperand16::RefImmAddr(bus.read16(addr + 1)),
-                                         OpcodeOperand16::SP))
-                }
-                0x0f => Ok(Instruction::Rrca),
-                0x17 => Ok(Instruction::Rla),
-                0x18 => Ok(Instruction::Jr(OpcodeCondition::None, bus.read(addr + 1) as i8)),
-                0x1f => Ok(Instruction::Rra),
-                0x20 => Ok(Instruction::Jr(OpcodeCondition::Nz, bus.read(addr + 1) as i8)),
-                0x27 => Ok(Instruction::Daa),
-                0x28 => Ok(Instruction::Jr(OpcodeCondition::Z, bus.read(addr + 1) as i8)),
-                0x2f => Ok(Instruction::Cpl),
-                0x30 => Ok(Instruction::Jr(OpcodeCondition::Nc, bus.read(addr + 1) as i8)),
-                0x37 => Ok(Instruction::Scf),
-                0x38 => Ok(Instruction::Jr(OpcodeCondition::C, bus.read(addr + 1) as i8)),
-                0x3f => Ok(Instruction::Ccf),
-                0x76 => Ok(Instruction::Halt),
-                0xc0 => Ok(Instruction::Ret(OpcodeCondition::Nz)),
-                0xc1 => Ok(Instruction::Pop(OpcodeOperand16::BC)),
-                0xc2 => {
-                    Ok(Instruction::Jp(3,
-                                       OpcodeCondition::Nz,
-                                       OpcodeOperand16::Imm(bus.read16(addr + 1))))
-                }
-                0xc3 => {
-                    Ok(Instruction::Jp(3,
-                                       OpcodeCondition::None,
-                                       OpcodeOperand16::Imm(bus.read16(addr + 1))))
-                }
-                0xc5 => Ok(Instruction::Push(OpcodeOperand16::BC)),
-                0xc4 => Ok(Instruction::Call(OpcodeCondition::Nz, bus.read16(addr + 1))),
-                0xc6 => Ok(Instruction::Add(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
-                0xc8 => Ok(Instruction::Ret(OpcodeCondition::Z)),
-                0xc9 => Ok(Instruction::Ret(OpcodeCondition::None)),
-                0xca => {
-                    Ok(Instruction::Jp(3,
-                                       OpcodeCondition::Z,
-                                       OpcodeOperand16::Imm(bus.read16(addr + 1))))
-                }
-                0xcb => {
-                    let cb_code = bus.read(addr + 1);
-                    let operand = OpcodeOperand8::from_3bit_encoding(cb_code, 0);
-                    if cb_code < 0x40 {
-                        match cb_code & 0b11111_000 {
-                            0x00 => Ok(Instruction::Rlc(operand)),
-                            0x08 => Ok(Instruction::Rrc(operand)),
-                            0x10 => Ok(Instruction::Rl(operand)),
-                            0x18 => Ok(Instruction::Rr(operand)),
-                            0x20 => Ok(Instruction::Sla(operand)),
-                            0x28 => Ok(Instruction::Sra(operand)),
-                            0x30 => Ok(Instruction::Swap(operand)),
-                            0x38 => Ok(Instruction::Srl(operand)),
-                            _ => panic!("Have not implemented CB {:02X}", cb_code),
-                        }
-                    } else {
-                        let bit_offset = (cb_code >> 3) & 0b111;
-                        match cb_code & 0b11_000_000 {
-                            0b01_000_000 => Ok(Instruction::Bit(operand, bit_offset)),
-                            0b10_000_000 => Ok(Instruction::Res(operand, bit_offset)),
-                            0b11_000_000 => Ok(Instruction::Set(operand, bit_offset)),
-                            _ => unreachable!(),
-                        }
+            // LD r,r`
+            // c if c & 0b1100_0000u8 == 0b0100_0000 {
+            // let dst = OpcodeRegister::decode(c, 3);
+            // let src =
+            // }
+            0x00 => Ok(Instruction::Nop),
+            0x07 => Ok(Instruction::Rlca),
+            0x08 => Ok(Instruction::Ld16(
+                3,
+                OpcodeOperand16::RefImmAddr(bus.read16(addr + 1)),
+                OpcodeOperand16::SP,
+            )),
+            0x0f => Ok(Instruction::Rrca),
+            0x17 => Ok(Instruction::Rla),
+            0x18 => Ok(Instruction::Jr(
+                OpcodeCondition::None,
+                bus.read(addr + 1) as i8,
+            )),
+            0x1f => Ok(Instruction::Rra),
+            0x20 => Ok(Instruction::Jr(
+                OpcodeCondition::Nz,
+                bus.read(addr + 1) as i8,
+            )),
+            0x27 => Ok(Instruction::Daa),
+            0x28 => Ok(Instruction::Jr(
+                OpcodeCondition::Z,
+                bus.read(addr + 1) as i8,
+            )),
+            0x2f => Ok(Instruction::Cpl),
+            0x30 => Ok(Instruction::Jr(
+                OpcodeCondition::Nc,
+                bus.read(addr + 1) as i8,
+            )),
+            0x37 => Ok(Instruction::Scf),
+            0x38 => Ok(Instruction::Jr(
+                OpcodeCondition::C,
+                bus.read(addr + 1) as i8,
+            )),
+            0x3f => Ok(Instruction::Ccf),
+            0x76 => Ok(Instruction::Halt),
+            0xc0 => Ok(Instruction::Ret(OpcodeCondition::Nz)),
+            0xc1 => Ok(Instruction::Pop(OpcodeOperand16::BC)),
+            0xc2 => Ok(Instruction::Jp(
+                3,
+                OpcodeCondition::Nz,
+                OpcodeOperand16::Imm(bus.read16(addr + 1)),
+            )),
+            0xc3 => Ok(Instruction::Jp(
+                3,
+                OpcodeCondition::None,
+                OpcodeOperand16::Imm(bus.read16(addr + 1)),
+            )),
+            0xc5 => Ok(Instruction::Push(OpcodeOperand16::BC)),
+            0xc4 => Ok(Instruction::Call(OpcodeCondition::Nz, bus.read16(addr + 1))),
+            0xc6 => Ok(Instruction::Add(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
+            0xc8 => Ok(Instruction::Ret(OpcodeCondition::Z)),
+            0xc9 => Ok(Instruction::Ret(OpcodeCondition::None)),
+            0xca => Ok(Instruction::Jp(
+                3,
+                OpcodeCondition::Z,
+                OpcodeOperand16::Imm(bus.read16(addr + 1)),
+            )),
+            0xcb => {
+                let cb_code = bus.read(addr + 1);
+                let operand = OpcodeOperand8::from_3bit_encoding(cb_code, 0);
+                if cb_code < 0x40 {
+                    match cb_code & 0b11111_000 {
+                        0x00 => Ok(Instruction::Rlc(operand)),
+                        0x08 => Ok(Instruction::Rrc(operand)),
+                        0x10 => Ok(Instruction::Rl(operand)),
+                        0x18 => Ok(Instruction::Rr(operand)),
+                        0x20 => Ok(Instruction::Sla(operand)),
+                        0x28 => Ok(Instruction::Sra(operand)),
+                        0x30 => Ok(Instruction::Swap(operand)),
+                        0x38 => Ok(Instruction::Srl(operand)),
+                        _ => panic!("Have not implemented CB {:02X}", cb_code),
+                    }
+                } else {
+                    let bit_offset = (cb_code >> 3) & 0b111;
+                    match cb_code & 0b11_000_000 {
+                        0b01_000_000 => Ok(Instruction::Bit(operand, bit_offset)),
+                        0b10_000_000 => Ok(Instruction::Res(operand, bit_offset)),
+                        0b11_000_000 => Ok(Instruction::Set(operand, bit_offset)),
+                        _ => unreachable!(),
                     }
                 }
-                0xcc => Ok(Instruction::Call(OpcodeCondition::Z, bus.read16(addr + 1))),
-                0xcd => Ok(Instruction::Call(OpcodeCondition::None, bus.read16(addr + 1))),
-                0xce => Ok(Instruction::Adc(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
-                0xd0 => Ok(Instruction::Ret(OpcodeCondition::Nc)),
-                0xd1 => Ok(Instruction::Pop(OpcodeOperand16::DE)),
-                0xd2 => {
-                    Ok(Instruction::Jp(3,
-                                       OpcodeCondition::Nc,
-                                       OpcodeOperand16::Imm(bus.read16(addr + 1))))
-                }
-                0xd4 => Ok(Instruction::Call(OpcodeCondition::Nc, bus.read16(addr + 1))),
-                0xd5 => Ok(Instruction::Push(OpcodeOperand16::DE)),
-                0xd6 => Ok(Instruction::Sub(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
-                0xd8 => Ok(Instruction::Ret(OpcodeCondition::C)),
-                0xd9 => Ok(Instruction::Reti),
-                0xda => {
-                    Ok(Instruction::Jp(3,
-                                       OpcodeCondition::C,
-                                       OpcodeOperand16::Imm(bus.read16(addr + 1))))
-                }
-                0xdc => Ok(Instruction::Call(OpcodeCondition::C, bus.read16(addr + 1))),
-                0xde => Ok(Instruction::Sbc(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
-                0xe0 => {
-                    Ok(Instruction::Ld(2,
-                                       OpcodeOperand8::RefUpperImmOffset(bus.read(addr + 1)),
-                                       OpcodeOperand8::A))
-                }
-                0xe1 => Ok(Instruction::Pop(OpcodeOperand16::HL)),
-                0xe2 => Ok(Instruction::Ld(1, OpcodeOperand8::RefUpperCOffset, OpcodeOperand8::A)),
-                0xe5 => Ok(Instruction::Push(OpcodeOperand16::HL)),
-                0xe6 => Ok(Instruction::And(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
-                0xe8 => Ok(Instruction::AddSp(bus.read(addr + 1) as i8)),
-                0xe9 => Ok(Instruction::Jp(1, OpcodeCondition::None, OpcodeOperand16::HL)),
-                0xea => {
-                    Ok(Instruction::Ld(3,
-                                       OpcodeOperand8::RefImmAddr(bus.read16(addr + 1)),
-                                       OpcodeOperand8::A))
-                }
-                0xee => Ok(Instruction::Xor(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
-                0xf0 => {
-                    Ok(Instruction::Ld(2,
-                                       OpcodeOperand8::A,
-                                       OpcodeOperand8::RefUpperImmOffset(bus.read(addr + 1))))
-                }
-                0xf1 => Ok(Instruction::Pop(OpcodeOperand16::AF)),
-                0xf2 => Ok(Instruction::Ld(1, OpcodeOperand8::A, OpcodeOperand8::RefUpperCOffset)),
-                0xf3 => Ok(Instruction::Di),
-                0xf5 => Ok(Instruction::Push(OpcodeOperand16::AF)),
-                0xf6 => Ok(Instruction::Or(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
-                0xf8 => {
-                    Ok(Instruction::Ld16(2,
-                                         OpcodeOperand16::HL,
-                                         OpcodeOperand16::SPPlusImm(bus.read(addr + 1) as i8)))
-                }
-                0xf9 => Ok(Instruction::Ld16(1, OpcodeOperand16::SP, OpcodeOperand16::HL)),
-                0xfa => {
-                    Ok(Instruction::Ld(3,
-                                       OpcodeOperand8::A,
-                                       OpcodeOperand8::RefImmAddr(bus.read16(addr + 1))))
-                }
-                0xfb => Ok(Instruction::Ei),
-                0xfe => Ok(Instruction::Cp(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
-                c if c & 0b11_00_1111 == 0b00_00_1001 => {
-                    // TODO: 1 opcode 8 cycles
-                    let src = OpcodeOperand16::from_2bit_encoding(c, 4);
-                    Ok(Instruction::Add16(src))
-                }
-                c if c & 0b11_000_111 == 0b11_000_111 => {
-                    let addr = (c & 0b00_111_000) as u16;
-                    Ok(Instruction::Rst(addr))
-                }
-                c if c & 0b11_000_000 == 0b10_000_000 => {
-                    let operand = OpcodeOperand8::from_3bit_encoding(c, 0);
-                    match c & 0b11_111_000 {
-                        0x80 => Ok(Instruction::Add(1, operand)),
-                        0x88 => Ok(Instruction::Adc(1, operand)),
-                        0x90 => Ok(Instruction::Sub(1, operand)),
-                        0x98 => Ok(Instruction::Sbc(1, operand)),
-                        0xa0 => Ok(Instruction::And(1, operand)),
-                        0xb0 => Ok(Instruction::Or(1, operand)),
-                        0xb8 => Ok(Instruction::Cp(1, operand)),
-                        0xa8 => Ok(Instruction::Xor(1, operand)),
-                        _ => Err(format!("Unrecognized opcode 0x{:02X} {:?}", opcode, operand)),
-                    }
-                }
-                c if c & 0b11_00_1111 == 0b00_00_0011 => {
-                    let operand = OpcodeOperand16::from_2bit_encoding(c, 4);
-                    Ok(Instruction::Inc16(operand))
-                }
-                c if c & 0b11_00_1111 == 0b00_00_1011 => {
-                    let operand = OpcodeOperand16::from_2bit_encoding(c, 4);
-                    Ok(Instruction::Dec16(operand))
-                }
-                c if c & 0b11_000_111 == 0b00_000_100 => {
-                    let operand = OpcodeOperand8::from_3bit_encoding(c, 3);
-                    Ok(Instruction::Inc(operand))
-                }
-                c if c & 0b11_000_111 == 0b00_000_101 => {
-                    let operand = OpcodeOperand8::from_3bit_encoding(c, 3);
-                    Ok(Instruction::Dec(operand))
-                }
-                c if c & 0b11_00_1111 == 0b00_00_1010 => {
-                    let dst = OpcodeOperand8::A;
-                    let src = OpcodeOperand8::from_2bit_deref_encoding(c, 4);
-                    Ok(Instruction::Ld(1, dst, src))
-                }
-                c if c & 0b11_00_1111 == 0b00_00_0010 => {
-                    let dst = OpcodeOperand8::from_2bit_deref_encoding(c, 4);
-                    let src = OpcodeOperand8::A;
-                    Ok(Instruction::Ld(1, dst, src))
-                }
-                c if c & 0b11_000_000 == 0b01_000_000 => {
-                    // TODO: This should not match ld reg, (hl) and ld (hl), reg
-                    let dst = OpcodeOperand8::from_3bit_encoding(c, 3);
-                    let src = OpcodeOperand8::from_3bit_encoding(c, 0);
-                    Ok(Instruction::Ld(1, dst, src))
-                }
-                c if c & 0b11_00_1111 == 0b00_00_0001 => {
-                    let dst = OpcodeOperand16::from_2bit_encoding(c, 4);
-                    let imm = bus.read16(addr + 1);
-                    Ok(Instruction::Ld16(3, dst, OpcodeOperand16::Imm(imm)))
-                }
-                c if c & 0b11_000_111 == 0b00_000_110 => {
-                    let dst = OpcodeOperand8::from_3bit_encoding(c, 3);
-                    let imm = bus.read(addr + 1);
-                    Ok(Instruction::Ld(2, dst, OpcodeOperand8::Imm(imm)))
-                }
-                _ => Err(format!("Unrecognized opcode 0x{:02X}", opcode)),
             }
-            .map(|r| (r, timing))
+            0xcc => Ok(Instruction::Call(OpcodeCondition::Z, bus.read16(addr + 1))),
+            0xcd => Ok(Instruction::Call(
+                OpcodeCondition::None,
+                bus.read16(addr + 1),
+            )),
+            0xce => Ok(Instruction::Adc(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
+            0xd0 => Ok(Instruction::Ret(OpcodeCondition::Nc)),
+            0xd1 => Ok(Instruction::Pop(OpcodeOperand16::DE)),
+            0xd2 => Ok(Instruction::Jp(
+                3,
+                OpcodeCondition::Nc,
+                OpcodeOperand16::Imm(bus.read16(addr + 1)),
+            )),
+            0xd4 => Ok(Instruction::Call(OpcodeCondition::Nc, bus.read16(addr + 1))),
+            0xd5 => Ok(Instruction::Push(OpcodeOperand16::DE)),
+            0xd6 => Ok(Instruction::Sub(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
+            0xd8 => Ok(Instruction::Ret(OpcodeCondition::C)),
+            0xd9 => Ok(Instruction::Reti),
+            0xda => Ok(Instruction::Jp(
+                3,
+                OpcodeCondition::C,
+                OpcodeOperand16::Imm(bus.read16(addr + 1)),
+            )),
+            0xdc => Ok(Instruction::Call(OpcodeCondition::C, bus.read16(addr + 1))),
+            0xde => Ok(Instruction::Sbc(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
+            0xe0 => Ok(Instruction::Ld(
+                2,
+                OpcodeOperand8::RefUpperImmOffset(bus.read(addr + 1)),
+                OpcodeOperand8::A,
+            )),
+            0xe1 => Ok(Instruction::Pop(OpcodeOperand16::HL)),
+            0xe2 => Ok(Instruction::Ld(
+                1,
+                OpcodeOperand8::RefUpperCOffset,
+                OpcodeOperand8::A,
+            )),
+            0xe5 => Ok(Instruction::Push(OpcodeOperand16::HL)),
+            0xe6 => Ok(Instruction::And(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
+            0xe8 => Ok(Instruction::AddSp(bus.read(addr + 1) as i8)),
+            0xe9 => Ok(Instruction::Jp(
+                1,
+                OpcodeCondition::None,
+                OpcodeOperand16::HL,
+            )),
+            0xea => Ok(Instruction::Ld(
+                3,
+                OpcodeOperand8::RefImmAddr(bus.read16(addr + 1)),
+                OpcodeOperand8::A,
+            )),
+            0xee => Ok(Instruction::Xor(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
+            0xf0 => Ok(Instruction::Ld(
+                2,
+                OpcodeOperand8::A,
+                OpcodeOperand8::RefUpperImmOffset(bus.read(addr + 1)),
+            )),
+            0xf1 => Ok(Instruction::Pop(OpcodeOperand16::AF)),
+            0xf2 => Ok(Instruction::Ld(
+                1,
+                OpcodeOperand8::A,
+                OpcodeOperand8::RefUpperCOffset,
+            )),
+            0xf3 => Ok(Instruction::Di),
+            0xf5 => Ok(Instruction::Push(OpcodeOperand16::AF)),
+            0xf6 => Ok(Instruction::Or(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
+            0xf8 => Ok(Instruction::Ld16(
+                2,
+                OpcodeOperand16::HL,
+                OpcodeOperand16::SPPlusImm(bus.read(addr + 1) as i8),
+            )),
+            0xf9 => Ok(Instruction::Ld16(
+                1,
+                OpcodeOperand16::SP,
+                OpcodeOperand16::HL,
+            )),
+            0xfa => Ok(Instruction::Ld(
+                3,
+                OpcodeOperand8::A,
+                OpcodeOperand8::RefImmAddr(bus.read16(addr + 1)),
+            )),
+            0xfb => Ok(Instruction::Ei),
+            0xfe => Ok(Instruction::Cp(2, OpcodeOperand8::Imm(bus.read(addr + 1)))),
+            c if c & 0b11_00_1111 == 0b00_00_1001 => {
+                // TODO: 1 opcode 8 cycles
+                let src = OpcodeOperand16::from_2bit_encoding(c, 4);
+                Ok(Instruction::Add16(src))
+            }
+            c if c & 0b11_000_111 == 0b11_000_111 => {
+                let addr = (c & 0b00_111_000) as u16;
+                Ok(Instruction::Rst(addr))
+            }
+            c if c & 0b11_000_000 == 0b10_000_000 => {
+                let operand = OpcodeOperand8::from_3bit_encoding(c, 0);
+                match c & 0b11_111_000 {
+                    0x80 => Ok(Instruction::Add(1, operand)),
+                    0x88 => Ok(Instruction::Adc(1, operand)),
+                    0x90 => Ok(Instruction::Sub(1, operand)),
+                    0x98 => Ok(Instruction::Sbc(1, operand)),
+                    0xa0 => Ok(Instruction::And(1, operand)),
+                    0xb0 => Ok(Instruction::Or(1, operand)),
+                    0xb8 => Ok(Instruction::Cp(1, operand)),
+                    0xa8 => Ok(Instruction::Xor(1, operand)),
+                    _ => Err(format!(
+                        "Unrecognized opcode 0x{:02X} {:?}",
+                        opcode, operand
+                    )),
+                }
+            }
+            c if c & 0b11_00_1111 == 0b00_00_0011 => {
+                let operand = OpcodeOperand16::from_2bit_encoding(c, 4);
+                Ok(Instruction::Inc16(operand))
+            }
+            c if c & 0b11_00_1111 == 0b00_00_1011 => {
+                let operand = OpcodeOperand16::from_2bit_encoding(c, 4);
+                Ok(Instruction::Dec16(operand))
+            }
+            c if c & 0b11_000_111 == 0b00_000_100 => {
+                let operand = OpcodeOperand8::from_3bit_encoding(c, 3);
+                Ok(Instruction::Inc(operand))
+            }
+            c if c & 0b11_000_111 == 0b00_000_101 => {
+                let operand = OpcodeOperand8::from_3bit_encoding(c, 3);
+                Ok(Instruction::Dec(operand))
+            }
+            c if c & 0b11_00_1111 == 0b00_00_1010 => {
+                let dst = OpcodeOperand8::A;
+                let src = OpcodeOperand8::from_2bit_deref_encoding(c, 4);
+                Ok(Instruction::Ld(1, dst, src))
+            }
+            c if c & 0b11_00_1111 == 0b00_00_0010 => {
+                let dst = OpcodeOperand8::from_2bit_deref_encoding(c, 4);
+                let src = OpcodeOperand8::A;
+                Ok(Instruction::Ld(1, dst, src))
+            }
+            c if c & 0b11_000_000 == 0b01_000_000 => {
+                // TODO: This should not match ld reg, (hl) and ld (hl), reg
+                let dst = OpcodeOperand8::from_3bit_encoding(c, 3);
+                let src = OpcodeOperand8::from_3bit_encoding(c, 0);
+                Ok(Instruction::Ld(1, dst, src))
+            }
+            c if c & 0b11_00_1111 == 0b00_00_0001 => {
+                let dst = OpcodeOperand16::from_2bit_encoding(c, 4);
+                let imm = bus.read16(addr + 1);
+                Ok(Instruction::Ld16(3, dst, OpcodeOperand16::Imm(imm)))
+            }
+            c if c & 0b11_000_111 == 0b00_000_110 => {
+                let dst = OpcodeOperand8::from_3bit_encoding(c, 3);
+                let imm = bus.read(addr + 1);
+                Ok(Instruction::Ld(2, dst, OpcodeOperand8::Imm(imm)))
+            }
+            _ => Err(format!("Unrecognized opcode 0x{:02X}", opcode)),
+        }
+        .map(|r| (r, timing))
     }
 }
 
-#[derive(Debug,Clone,Serialize,Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cpu {
     // IME
     // TODO: Expose from function instead
@@ -644,27 +673,27 @@ pub struct Cpu {
     pub bus: Bus,
 }
 
-static INST_TIMINGS: [u8; 256] =
-    [1, 3, 2, 2, 1, 1, 2, 1, 5, 2, 2, 2, 1, 1, 2, 1, 0, 3, 2, 2, 1, 1, 2, 1, 3, 2, 2, 2, 1, 1, 2,
-     1, 2, 3, 2, 2, 1, 1, 2, 1, 2, 2, 2, 2, 1, 1, 2, 1, 2, 3, 2, 2, 3, 3, 3, 1, 2, 2, 2, 2, 1, 1,
-     2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1,
-     1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2, 2, 2, 2, 2, 2, 0, 2, 1, 1, 1, 1,
-     1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1,
-     1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1,
-     1, 1, 1, 1, 2, 1, 2, 3, 3, 4, 3, 4, 2, 4, 2, 4, 3, 0, 3, 6, 2, 4, 2, 3, 3, 0, 3, 4, 2, 4, 2,
-     4, 3, 0, 3, 0, 2, 4, 3, 3, 2, 0, 0, 4, 2, 4, 4, 1, 4, 0, 0, 0, 2, 4, 3, 3, 2, 1, 0, 4, 2, 4,
-     3, 2, 4, 1, 0, 0, 2, 4];
+static INST_TIMINGS: [u8; 256] = [
+    1, 3, 2, 2, 1, 1, 2, 1, 5, 2, 2, 2, 1, 1, 2, 1, 0, 3, 2, 2, 1, 1, 2, 1, 3, 2, 2, 2, 1, 1, 2, 1,
+    2, 3, 2, 2, 1, 1, 2, 1, 2, 2, 2, 2, 1, 1, 2, 1, 2, 3, 2, 2, 3, 3, 3, 1, 2, 2, 2, 2, 1, 1, 2, 1,
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1,
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2, 2, 2, 2, 2, 2, 0, 2, 1, 1, 1, 1, 1, 1, 2, 1,
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1,
+    1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1,
+    2, 3, 3, 4, 3, 4, 2, 4, 2, 4, 3, 0, 3, 6, 2, 4, 2, 3, 3, 0, 3, 4, 2, 4, 2, 4, 3, 0, 3, 0, 2, 4,
+    3, 3, 2, 0, 0, 4, 2, 4, 4, 1, 4, 0, 0, 0, 2, 4, 3, 3, 2, 1, 0, 4, 2, 4, 3, 2, 4, 1, 0, 0, 2, 4,
+];
 
-static CB_TIMINGS: [u8; 256] =
-    [2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4,
-     2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2,
-     4, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2,
-     2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2,
-     2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2,
-     2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2,
-     2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2,
-     2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2,
-     2, 2, 2, 2, 2, 2, 4, 2];
+static CB_TIMINGS: [u8; 256] = [
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2,
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2,
+    2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2,
+    2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 2,
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2,
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2,
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2,
+    2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2,
+];
 
 impl Cpu {
     pub fn new(rom_file: &str) -> Cpu {
@@ -697,7 +726,12 @@ impl Cpu {
         self.cycles += count;
     }
 
-    fn write_16bit_operand(&mut self, reg: &OpcodeOperand16, value: u16, ctx: &mut impl RunContext) {
+    fn write_16bit_operand(
+        &mut self,
+        reg: &OpcodeOperand16,
+        value: u16,
+        ctx: &mut impl RunContext,
+    ) {
         match *reg {
             OpcodeOperand16::AF => {
                 self.regs.a = (value >> 8) as u8;
@@ -742,8 +776,7 @@ impl Cpu {
                     CPU_FLAG_H
                 } else {
                     0
-                } |
-                              if ((imm as usize) & 0xff) + (sp & 0xff) > 0xff {
+                } | if ((imm as usize) & 0xff) + (sp & 0xff) > 0xff {
                     CPU_FLAG_C
                 } else {
                     0
@@ -761,7 +794,6 @@ impl Cpu {
     fn store(&mut self, addr: u16, value: u8, ctx: &mut impl RunContext) {
         self.bus.write(addr, value, ctx)
     }
-
 
     fn read_8bit_operand(&mut self, operand: &OpcodeOperand8) -> u8 {
         match *operand {
@@ -784,13 +816,15 @@ impl Cpu {
             OpcodeOperand8::RefHLInc => {
                 let addr = self.regs.read_reg16(OpcodeRegister16::HL);
                 let value = self.load(addr);
-                self.regs.write_reg16(OpcodeRegister16::HL, addr.wrapping_add(1));
+                self.regs
+                    .write_reg16(OpcodeRegister16::HL, addr.wrapping_add(1));
                 value
             }
             OpcodeOperand8::RefHLDec => {
                 let addr = self.regs.read_reg16(OpcodeRegister16::HL);
                 let value = self.load(addr);
-                self.regs.write_reg16(OpcodeRegister16::HL, addr.wrapping_sub(1));
+                self.regs
+                    .write_reg16(OpcodeRegister16::HL, addr.wrapping_sub(1));
                 value
             }
             OpcodeOperand8::RefUpperImmOffset(offset) => self.load(0xff00 + (offset as u16)),
@@ -805,7 +839,12 @@ impl Cpu {
             }
         }
     }
-    fn write_8bit_operand(&mut self, operand: &OpcodeOperand8, value: u8, ctx: &mut impl RunContext) {
+    fn write_8bit_operand(
+        &mut self,
+        operand: &OpcodeOperand8,
+        value: u8,
+        ctx: &mut impl RunContext,
+    ) {
         match *operand {
             OpcodeOperand8::A => self.regs.a = value,
             OpcodeOperand8::B => self.regs.b = value,
@@ -826,12 +865,14 @@ impl Cpu {
             OpcodeOperand8::RefHLInc => {
                 let hl = self.regs.read_reg16(OpcodeRegister16::HL);
                 self.store(hl, value, ctx);
-                self.regs.write_reg16(OpcodeRegister16::HL, hl.wrapping_add(1));
+                self.regs
+                    .write_reg16(OpcodeRegister16::HL, hl.wrapping_add(1));
             }
             OpcodeOperand8::RefHLDec => {
                 let hl = self.regs.read_reg16(OpcodeRegister16::HL);
                 self.store(hl, value, ctx);
-                self.regs.write_reg16(OpcodeRegister16::HL, hl.wrapping_sub(1));
+                self.regs
+                    .write_reg16(OpcodeRegister16::HL, hl.wrapping_sub(1));
             }
             OpcodeOperand8::RefUpperImmOffset(offset) => {
                 self.store(0xff00 + (offset as u16), value, ctx)
@@ -862,14 +903,17 @@ impl Cpu {
 
     fn sub(lhs: u8, rhs: u8) -> (u8, u8) {
         let (res, overflow) = lhs.overflowing_sub(rhs);
-        (res,
-         (if overflow { CPU_FLAG_C } else { 0 }) | (if res == 0 { CPU_FLAG_Z } else { 0 }) |
-         CPU_FLAG_N |
-         (if (rhs & 0xf) > (lhs & 0xf) {
-             CPU_FLAG_H
-         } else {
-             0
-         }))
+        (
+            res,
+            (if overflow { CPU_FLAG_C } else { 0 })
+                | (if res == 0 { CPU_FLAG_Z } else { 0 })
+                | CPU_FLAG_N
+                | (if (rhs & 0xf) > (lhs & 0xf) {
+                    CPU_FLAG_H
+                } else {
+                    0
+                }),
+        )
     }
 
     fn check_flag(&self, cond: OpcodeCondition) -> bool {
@@ -882,7 +926,11 @@ impl Cpu {
         }
     }
 
-    fn execute_instruction(&mut self, instruction: Instruction, ctx: &mut impl RunContext) -> Result<(), &'static str> {
+    fn execute_instruction(
+        &mut self,
+        instruction: Instruction,
+        ctx: &mut impl RunContext,
+    ) -> Result<(), &'static str> {
         match instruction {
             Instruction::Nop => Ok(()),
             Instruction::Rlca => {
@@ -941,9 +989,10 @@ impl Cpu {
                     }
                 }
 
-                self.regs.f = if a & 0xff == 0 { CPU_FLAG_Z } else { 0 } | (f & CPU_FLAG_N) |
-                              if carry_set { CPU_FLAG_C } else { 0 } |
-                              0; // ((self.regs.a ^ a) & CPU_FLAG_H);
+                self.regs.f = if a & 0xff == 0 { CPU_FLAG_Z } else { 0 }
+                    | (f & CPU_FLAG_N)
+                    | if carry_set { CPU_FLAG_C } else { 0 }
+                    | 0; // ((self.regs.a ^ a) & CPU_FLAG_H);
 
                 self.regs.a = a as u8;
 
@@ -988,16 +1037,18 @@ impl Cpu {
             Instruction::Inc(operand) => {
                 let value = self.read_8bit_operand(&operand).wrapping_add(1);
                 self.write_8bit_operand(&operand, value, ctx);
-                self.regs.f = (self.regs.f & CPU_FLAG_C) | if value == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (value & 0xf) == 0 { CPU_FLAG_H } else { 0 };
+                self.regs.f = (self.regs.f & CPU_FLAG_C)
+                    | if value == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (value & 0xf) == 0 { CPU_FLAG_H } else { 0 };
                 Ok(())
             }
             Instruction::Dec(operand) => {
                 let value = self.read_8bit_operand(&operand).wrapping_sub(1);
                 self.write_8bit_operand(&operand, value, ctx);
-                self.regs.f = (self.regs.f & CPU_FLAG_C) | if value == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (value & 0xf) == 0xf { CPU_FLAG_H } else { 0 } |
-                              CPU_FLAG_N;
+                self.regs.f = (self.regs.f & CPU_FLAG_C)
+                    | if value == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (value & 0xf) == 0xf { CPU_FLAG_H } else { 0 }
+                    | CPU_FLAG_N;
                 Ok(())
             }
             Instruction::Inc16(operand) => {
@@ -1063,13 +1114,13 @@ impl Cpu {
                 let lhs = self.regs.a as usize;
                 let result = lhs + rhs + c;
 
-                self.regs.f = if result > 0xff { CPU_FLAG_C } else { 0 } |
-                              if (result as u8) == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (rhs & 0xf) + (lhs & 0xf) + c > 0xf {
-                    CPU_FLAG_H
-                } else {
-                    0
-                };
+                self.regs.f = if result > 0xff { CPU_FLAG_C } else { 0 }
+                    | if (result as u8) == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (rhs & 0xf) + (lhs & 0xf) + c > 0xf {
+                        CPU_FLAG_H
+                    } else {
+                        0
+                    };
 
                 self.regs.a = result as u8;
                 Ok(())
@@ -1084,13 +1135,14 @@ impl Cpu {
                 let lhs = self.regs.a as isize;
                 let result = lhs - (rhs + c);
 
-                self.regs.f = if result < 0 { CPU_FLAG_C } else { 0 } |
-                              if (result as u8) == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (lhs & 0xf) - ((rhs & 0xf) + c) < 0 {
-                    CPU_FLAG_H
-                } else {
-                    0
-                } | CPU_FLAG_N;
+                self.regs.f = if result < 0 { CPU_FLAG_C } else { 0 }
+                    | if (result as u8) == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (lhs & 0xf) - ((rhs & 0xf) + c) < 0 {
+                        CPU_FLAG_H
+                    } else {
+                        0
+                    }
+                    | CPU_FLAG_N;
 
                 self.regs.a = result as u8;
                 Ok(())
@@ -1100,13 +1152,13 @@ impl Cpu {
                 let rhs = self.read_8bit_operand(&r);
                 let (result, carry) = lhs.overflowing_add(rhs);
                 self.regs.a = result;
-                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
-                              if carry { CPU_FLAG_C } else { 0 } |
-                              if ((lhs & 0xf) + (rhs & 0xf)) > 0xf {
-                    CPU_FLAG_H
-                } else {
-                    0
-                };
+                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 }
+                    | if carry { CPU_FLAG_C } else { 0 }
+                    | if ((lhs & 0xf) + (rhs & 0xf)) > 0xf {
+                        CPU_FLAG_H
+                    } else {
+                        0
+                    };
                 Ok(())
             }
             Instruction::Add16(operand) => {
@@ -1117,12 +1169,13 @@ impl Cpu {
                 let (result, carry) = lhs.overflowing_add(rhs);
                 self.write_16bit_operand(&dst, result, ctx);
                 // TODO: Unsure if half carry should be set
-                self.regs.f = (self.regs.f & CPU_FLAG_Z) | if carry { CPU_FLAG_C } else { 0 } |
-                              if ((lhs & 0xfff) + (rhs & 0xfff)) > 0xfff {
-                    CPU_FLAG_H
-                } else {
-                    0
-                };
+                self.regs.f = (self.regs.f & CPU_FLAG_Z)
+                    | if carry { CPU_FLAG_C } else { 0 }
+                    | if ((lhs & 0xfff) + (rhs & 0xfff)) > 0xfff {
+                        CPU_FLAG_H
+                    } else {
+                        0
+                    };
                 // TODO Find out if this is correct behavior
                 Ok(())
             }
@@ -1175,12 +1228,12 @@ impl Cpu {
             }
             Instruction::Rra => {
                 let value = self.regs.a;
-                let result = value >> 1 |
-                             if self.regs.f & CPU_FLAG_C != 0 {
-                    0x80
-                } else {
-                    0
-                };
+                let result = value >> 1
+                    | if self.regs.f & CPU_FLAG_C != 0 {
+                        0x80
+                    } else {
+                        0
+                    };
                 self.regs.a = result;
                 // Almost like RR but according to opcode docs does not affect the Z flag
                 self.regs.f = if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
@@ -1200,64 +1253,64 @@ impl Cpu {
             Instruction::Rlc(operand) => {
                 let result = self.read_8bit_operand(&operand).rotate_left(1);
                 self.write_8bit_operand(&operand, result, ctx);
-                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (result & 1) == 1 { CPU_FLAG_C } else { 0 };
+                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (result & 1) == 1 { CPU_FLAG_C } else { 0 };
                 Ok(())
             }
             Instruction::Rrc(operand) => {
                 let result = self.read_8bit_operand(&operand).rotate_right(1);
                 self.write_8bit_operand(&operand, result, ctx);
-                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (result & 0x80) == 0x80 {
-                    CPU_FLAG_C
-                } else {
-                    0
-                };
+                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (result & 0x80) == 0x80 {
+                        CPU_FLAG_C
+                    } else {
+                        0
+                    };
                 Ok(())
             }
             Instruction::Rr(operand) => {
                 let value = self.read_8bit_operand(&operand);
-                let result = value >> 1 |
-                             if self.regs.f & CPU_FLAG_C != 0 {
-                    0x80
-                } else {
-                    0
-                };
+                let result = value >> 1
+                    | if self.regs.f & CPU_FLAG_C != 0 {
+                        0x80
+                    } else {
+                        0
+                    };
                 self.write_8bit_operand(&operand, result, ctx);
-                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
+                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
                 Ok(())
             }
             Instruction::Rl(operand) => {
                 let value = self.read_8bit_operand(&operand);
                 let result = value << 1 | if self.regs.f & CPU_FLAG_C != 0 { 1 } else { 0 };
                 self.write_8bit_operand(&operand, result, ctx);
-                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (value & 0x80) == 0x80 {
-                    CPU_FLAG_C
-                } else {
-                    0
-                };
+                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (value & 0x80) == 0x80 {
+                        CPU_FLAG_C
+                    } else {
+                        0
+                    };
                 Ok(())
             }
             Instruction::Sla(operand) => {
                 let value = self.read_8bit_operand(&operand);
                 let result = value << 1;
                 self.write_8bit_operand(&operand, result, ctx);
-                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (value & 0x80) == 0x80 {
-                    CPU_FLAG_C
-                } else {
-                    0
-                };
+                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (value & 0x80) == 0x80 {
+                        CPU_FLAG_C
+                    } else {
+                        0
+                    };
                 Ok(())
             }
             Instruction::Sra(operand) => {
                 let value = self.read_8bit_operand(&operand);
                 let result = value >> 1 | (value & 0x80);
                 self.write_8bit_operand(&operand, result, ctx);
-                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
+                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
                 Ok(())
             }
             Instruction::Swap(operand) => {
@@ -1271,8 +1324,8 @@ impl Cpu {
                 let value = self.read_8bit_operand(&operand);
                 let result = value >> 1;
                 self.write_8bit_operand(&operand, result, ctx);
-                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 } |
-                              if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
+                self.regs.f = if result == 0 { CPU_FLAG_Z } else { 0 }
+                    | if (value & 1) == 1 { CPU_FLAG_C } else { 0 };
                 Ok(())
             }
             Instruction::Bit(operand, offset) => {
@@ -1281,7 +1334,8 @@ impl Cpu {
                     CPU_FLAG_Z
                 } else {
                     0
-                } | CPU_FLAG_H | (self.regs.f & CPU_FLAG_C);
+                } | CPU_FLAG_H
+                    | (self.regs.f & CPU_FLAG_C);
                 Ok(())
             }
             Instruction::Res(operand, offset) => {

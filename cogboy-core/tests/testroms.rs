@@ -1,6 +1,6 @@
 extern crate cogboy_core;
 
-use cogboy_core::{System, RunContext};
+use cogboy_core::{RunContext, System};
 
 struct TestContext;
 impl RunContext for TestContext {
@@ -86,4 +86,3 @@ fn cpu_instr_11_op_a_hl() {
 fn instr_timing() {
     run_test_rom("tests/gb-test-roms/instr_timing/instr_timing.gb");
 }
-

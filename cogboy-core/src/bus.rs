@@ -1,19 +1,17 @@
-
-use crate::RunContext;
 use super::cartridge::Cartridge;
-use super::sound::Sound;
-use super::lcd::Lcd;
 use super::constants::*;
+use super::lcd::Lcd;
+use super::sound::Sound;
+use crate::RunContext;
 
 use num::FromPrimitive;
-use std::io;
 use std::collections::VecDeque;
+use std::io;
 
 use std::fs::File;
 use std::io::Write;
 
-
-#[derive(Debug,Clone,Serialize,Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bus {
     pub cartridge: Cartridge,
     // TODO: Expose in better way
@@ -35,11 +33,11 @@ enum IoAddress {
     Tma = 0xff06,
     Tac = 0xff07,
     If = 0xff0f,
-    Ie = 0xffff 
+    Ie = 0xffff
 }
 }
 
-#[derive(Debug,Clone,Serialize,Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Timers {
     div: u8,
     tima: u8,
@@ -122,7 +120,7 @@ impl Timers {
     }
 }
 
-#[derive(Debug,Clone,Serialize,Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IoPorts {
     joypad: u8,
     serial_data: u8,
@@ -148,7 +146,7 @@ impl IoPorts {
             interrupt_enable: 0,
             interrupt_flags: 0,
             joypad_all_buttons: 0xff,
-            serial_out: VecDeque::new()
+            serial_out: VecDeque::new(),
         }
     }
 
@@ -175,13 +173,13 @@ impl IoPorts {
                 }
             }
             None => {
-                debug!("WRITE 0x{:02X} to IOPORT 0x{:04X} not recognized (ignoring)",
-                       value,
-                       addr);
+                debug!(
+                    "WRITE 0x{:02X} to IOPORT 0x{:04X} not recognized (ignoring)",
+                    value, addr
+                );
             }
         }
     }
-
 
     fn read(&self, addr: u16) -> u8 {
         match IoAddress::from_u16(addr) {
@@ -193,8 +191,7 @@ impl IoPorts {
                             self.joypad_all_buttons & 0xf
                         } else {
                             0xf
-                        } &
-                        if self.joypad & 0x20 == 0 {
+                        } & if self.joypad & 0x20 == 0 {
                             self.joypad_all_buttons >> 4
                         } else {
                             0xf
@@ -244,11 +241,9 @@ impl Bus {
     pub fn read(&self, addr: u16) -> u8 {
         let value = match addr {
             MEM_LCD_IO_DMA => 0xff,
-            MEM_CARTRIDGE_ROM_START..=MEM_CARTRIDGE_ROM_END =>
-                self.cartridge.read(addr),
+            MEM_CARTRIDGE_ROM_START..=MEM_CARTRIDGE_ROM_END => self.cartridge.read(addr),
             MEM_LCD_VRAM_START..=MEM_LCD_VRAM_END => self.lcd.read(addr),
-            MEM_CARTRIDGE_RAM_START..=MEM_CARTRIDGE_RAM_END =>
-                self.cartridge.read(addr),
+            MEM_CARTRIDGE_RAM_START..=MEM_CARTRIDGE_RAM_END => self.cartridge.read(addr),
             0xc000..=0xdfff => self.wram[(addr - 0xc000) as usize],
             0xe000..=0xfdff => self.wram[(addr - 0xe000) as usize],
             MEM_LCD_OAM_START..=MEM_LCD_OAM_END => self.lcd.read(addr),
@@ -274,7 +269,7 @@ impl Bus {
         trace!("Writing {:02x} to {:04x}", value, addr);
 
         ctx.check_watchpoint(addr, value);
-        
+
         match addr {
             MEM_LCD_IO_DMA => {
                 // TODO Refactor stuff in IoPorts to Bus
@@ -286,11 +281,9 @@ impl Bus {
                     self.write(dst_addr + i, d, ctx);
                 }
             }
-            MEM_CARTRIDGE_ROM_START..=MEM_CARTRIDGE_ROM_END =>
-                self.cartridge.write(addr, value),
+            MEM_CARTRIDGE_ROM_START..=MEM_CARTRIDGE_ROM_END => self.cartridge.write(addr, value),
             MEM_LCD_VRAM_START..=MEM_LCD_VRAM_END => self.lcd.write(addr, value),
-            MEM_CARTRIDGE_RAM_START..=MEM_CARTRIDGE_RAM_END =>
-                self.cartridge.write(addr, value),
+            MEM_CARTRIDGE_RAM_START..=MEM_CARTRIDGE_RAM_END => self.cartridge.write(addr, value),
             0xc000..=0xdfff => self.wram[(addr - 0xc000) as usize] = value,
             0xe000..=0xfdff => self.wram[(addr - 0xe000) as usize] = value,
             MEM_LCD_OAM_START..=MEM_LCD_OAM_END => self.lcd.write(addr, value),

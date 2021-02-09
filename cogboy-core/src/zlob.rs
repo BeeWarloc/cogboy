@@ -1,8 +1,8 @@
-use std::io::{self, Write, Read};
+use bincode::{deserialize_from, serialize_into};
 use serde::Deserialize;
 use serde::Serialize;
+use std::io::{self, Read, Write};
 use std::marker::PhantomData;
-use bincode::{deserialize_from, serialize_into};
 
 #[derive(Clone)]
 pub struct Zlob<T> {
@@ -20,7 +20,10 @@ fn new_decoder<R: Read>(src: R) -> impl Read {
     flate2::read::DeflateDecoder::new(src)
 }
 
-impl<T> Zlob<T> where for<'de> T: Deserialize<'de> {
+impl<T> Zlob<T>
+where
+    for<'de> T: Deserialize<'de>,
+{
     pub fn size(&self) -> usize {
         self.bytes.len()
     }
@@ -34,8 +37,12 @@ impl<T> Zlob<T> where for<'de> T: Deserialize<'de> {
     pub fn count_diff_bytes(&self, other: &Self) -> usize {
         let self_reader = new_decoder(self.bytes.as_ref());
         let other_reader = new_decoder(other.bytes.as_ref());
-        let diffstream: Vec<u8> = self_reader.bytes().filter_map(|x| x.ok())
-            .zip(other_reader.bytes().filter_map(|x| x.ok())).map(|(a,b)| a.wrapping_sub(b)).collect();
+        let diffstream: Vec<u8> = self_reader
+            .bytes()
+            .filter_map(|x| x.ok())
+            .zip(other_reader.bytes().filter_map(|x| x.ok()))
+            .map(|(a, b)| a.wrapping_sub(b))
+            .collect();
         let mut diffvec: Vec<u8> = Vec::new();
         {
             let mut writer = new_encoder(&mut diffvec);
@@ -52,13 +59,18 @@ impl<T> Zlob<T> where for<'de> T: Deserialize<'de> {
 }
 
 impl<'a, T> From<&'a T> for Zlob<T>
-    where T: Serialize {
+where
+    T: Serialize,
+{
     fn from(value: &'a T) -> Self {
         let mut writer = Vec::new();
         {
             let mut writer = new_encoder(&mut writer);
             serialize_into(&mut writer, value).expect("Failed serializing");
         }
-        Zlob { bytes: writer.into_boxed_slice(), phantom: PhantomData }
+        Zlob {
+            bytes: writer.into_boxed_slice(),
+            phantom: PhantomData,
+        }
     }
 }
