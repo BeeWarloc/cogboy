@@ -31,6 +31,7 @@ pub struct Lcd {
     obp1: u8,
     wy: u8,
     wx: u8,
+    wy_counter: u8,
 
     pub show_bg: bool,
     pub show_sprites: bool,
@@ -95,6 +96,7 @@ impl Lcd {
             obp1: 0xff,
             wy: 0,
             wx: 0,
+            wy_counter: 0,
             show_bg: true,
             show_sprites: true,
             show_window: true
@@ -202,7 +204,7 @@ impl Lcd {
     }
 
     fn is_window_enabled(&self) -> bool {
-        (self.lcdc & LCDC_WINDOW_DISPLAY_ENABLE) != 0
+        (self.lcdc & LCDC_WINDOW_DISPLAY_ENABLE) != 0 && self.wx >= 7 && self.wx <= 166
     }
 
     fn get_mode(&self) -> LcdMode {
@@ -227,7 +229,7 @@ impl Lcd {
     }
 
     fn get_sprite_height(&self) -> i32 {
-        if (self.lcdc & 0x04) == 0 { 8 } else { 16 }
+        if (self.lcdc & LCDC_SPRITES_SIZE) == 0 { 8 } else { 16 }
     }
 
     fn get_oam_entries(&self, line_y: i32) -> Vec<SpriteOamEntry> {
@@ -242,7 +244,7 @@ impl Lcd {
 
         // TODO: Also sort by OAM table ordering, see http://bgb.bircd.org/pandocs.htm#vramspriteattributetableoam
         // TODO: Maybe the ordering is reverse from how it should be here, since the first sprite gets overdrawn by the last?
-        entries.sort_unstable_by_key(|entry| -((((entry.x as usize) << 16) | entry.index as usize) as isize));
+        entries.sort_unstable_by_key(|entry| ((((entry.x as usize) << 16) | entry.index as usize) as isize));
         if entries.len() > 10 {
             entries.truncate(10);
         }
@@ -255,7 +257,7 @@ impl Lcd {
         let entries = self.get_oam_entries(line_y);
         let line_start = line_y * LCD_WIDTH as i32;
 
-        for entry in entries {
+        for entry in entries.iter().rev() {
             let palette = if entry.palette_number() == 0 {
                 self.obp0
             } else {
@@ -338,7 +340,7 @@ impl Lcd {
     }
 
     fn get_bg_tile_offset(&self, tile_id: u8) -> usize {
-        if (self.lcdc & 0x10) == 0 {
+        if (self.lcdc & LCDC_BG_AND_WINDOW_TILE_DATA_SELECT) == 0 {
             (0x1000 + ((tile_id as i8) as isize * 16)) as usize * 4
         } else {
             (0x0000 + (tile_id as usize * 16)) * 4
@@ -363,7 +365,7 @@ impl Lcd {
         // let bit_offset = 7 - (x & 0x7);
         // let palette_idx = (((l0 >> bit_offset) & 1) | (((l1 >> bit_offset) & 1) << 1)) as usize;
         //
-        Lcd::palette_lookup(self.bgp, palette_idx)
+        Lcd::palette_lookup(self.bgp, palette_idx) | if palette_idx == 0 { 0x80 } else { 0 }
     }
 
     fn get_bg_at(&self, x: u8, y: u8) -> u8 {
@@ -392,7 +394,7 @@ impl Lcd {
     }
 
     pub fn tick(&mut self, cycles: usize) -> u8 {
-        if self.lcdc & 0x80 == 0 {
+        if self.lcdc & LCDC_DISPLAY_ENABLE == 0 {
             return 0;
         }
 
@@ -416,6 +418,7 @@ impl Lcd {
                     ints |= self.inc_ly();
                     if self.ly >= 144 {
                         self.vblank_sync = true;
+                        self.wy_counter = 0;
                         mem::swap(&mut self.buffer, &mut self.last_frame);
                         self.set_mode(LcdMode::Vblank);
                         ints |= INT_MASK_VBLANK;
@@ -449,23 +452,27 @@ impl Lcd {
     fn draw_line(&mut self) {
         let y = self.ly;
         let offset = y as usize * LCD_WIDTH;
-        if self.show_bg {
+        if self.show_bg && (self.lcdc & LCDC_BG_ENABLED) != 0 {
             for x in 0..LCD_WIDTH {
                 self.buffer[offset + x] =
                     self.get_bg_at((x as u8).wrapping_add(self.scx), y.wrapping_add(self.scy));
             }
-        }
-        if self.show_sprites {
-            self.draw_sprites(y as i32);
+        } else {
+            for x in 0..LCD_WIDTH {
+                self.buffer[offset + x] = 0x80;
+            }
         }
         if self.show_window {
             if self.is_window_enabled() && y >= self.wy {
-                let win_y = y - self.wy;
                 for x in (self.wx.saturating_sub(7) as usize)..LCD_WIDTH {
                     self.buffer[offset + x] =
-                        self.get_window_at((x as u8).wrapping_sub(self.wx.wrapping_sub(7)), win_y);
+                        self.get_window_at((x as u8).wrapping_sub(self.wx.wrapping_sub(7)), self.wy_counter);
                 }
+                self.wy_counter += 1;
             }
+        }
+        if self.show_sprites && (self.lcdc & LCDC_SPRITES_ENABLED) != 0 {
+            self.draw_sprites(y as i32);
         }
     }
 }

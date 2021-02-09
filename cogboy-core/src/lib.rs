@@ -125,9 +125,14 @@ pub mod constants {
     pub const LCD_WIDTH: usize = 160;
     pub const LCD_HEIGHT: usize = 144;
 
-    pub const LCDC_BG_TILE_MAP_DISPLAY_SELECT: u8 = 0x08;
-    pub const LCDC_WINDOW_DISPLAY_ENABLE: u8 = 0x20;
-    pub const LCDC_WINDOW_TILE_MAP_DISPLAY_SELECT: u8 = 0x40;
+    pub const LCDC_BG_ENABLED: u8 = 1 << 0;
+    pub const LCDC_SPRITES_ENABLED: u8 = 1 << 1;
+    pub const LCDC_SPRITES_SIZE: u8 = 1 << 2;
+    pub const LCDC_BG_TILE_MAP_DISPLAY_SELECT: u8 = 1 << 3;
+    pub const LCDC_BG_AND_WINDOW_TILE_DATA_SELECT: u8 = 1 << 4;
+    pub const LCDC_WINDOW_DISPLAY_ENABLE: u8 = 1 << 5;
+    pub const LCDC_WINDOW_TILE_MAP_DISPLAY_SELECT: u8 = 1 << 6;
+    pub const LCDC_DISPLAY_ENABLE: u8 = 1 << 7;
 
     pub const INT_VBLANK: usize = 0;
     pub const INT_MASK_VBLANK: u8 = 1u8 << INT_VBLANK;
