@@ -1,4 +1,4 @@
-use romfile::RomFile;
+use crate::romfile::RomFile;
 use std;
 use std::io;
 
@@ -45,8 +45,8 @@ impl Cartridge {
 
     pub fn read(&self, addr: u16) -> u8 {
         let value = match addr {
-            0x0000...0x3fff => self.rom[addr as usize],
-            0x4000...0x7fff => {
+            0x0000..=0x3fff => self.rom[addr as usize],
+            0x4000..=0x7fff => {
                 // TODO bound checking for invalid ROM BANK select, or maybe mask?
                 let offset = addr as usize + ((self.rom_bank as usize - 1) * 0x4000) as usize;
                 let value = self.rom[offset];
@@ -57,7 +57,7 @@ impl Cartridge {
                        offset);
                 value
             }
-            0xa000...0xbfff => {
+            0xa000..=0xbfff => {
                 let idx = (addr - 0xa000) as usize;
                 if idx < self.ram.len() {
                     self.ram[idx]
@@ -73,20 +73,20 @@ impl Cartridge {
     pub fn write(&mut self, addr: u16, value: u8) {
         trace!("Writing {:02x} to {:04x}", value, addr);
         match addr {
-            0x0000...0x1fff => {
+            0x0000..=0x1fff => {
                 self.ram_enabled = self.ram.len() > 0 && (value & 0xf) == 0xa;
             }
-            0x2000...0x3fff => {
+            0x2000..=0x3fff => {
                 self.rom_bank = std::cmp::max(value & 31, 1);
                 trace!("Switching to bank {}", self.rom_bank);
             }
-            0x4000...0x5fff => {
+            0x4000..=0x5fff => {
                 // TODO: RAM bank switch
                 if value != 0 {
                     unimplemented!()
                 }
             }
-            0xa000...0xbfff => {
+            0xa000..=0xbfff => {
                 let idx = (addr - 0xa000) as usize;
                 if idx < self.ram.len() {
                     self.ram[idx] = value;

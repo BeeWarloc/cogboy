@@ -2,6 +2,7 @@
 name = "cogboy-core"
 version = "0.2.0"
 authors = ["BeeWarloc"]
+edition = "2018"
 
 [dependencies]
 enum_primitive = "*"

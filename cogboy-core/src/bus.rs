@@ -235,26 +235,26 @@ impl Bus {
     }
 
     pub fn dump_wram(&mut self) -> io::Result<()> {
-        let mut f = try!(File::create("wram.dump"));
-        try!(f.write_all(&self.wram));
+        let mut f = File::create("wram.dump")?;
+        f.write_all(&self.wram)?;
         Ok(())
     }
 
     pub fn read(&self, addr: u16) -> u8 {
         let value = match addr {
             MEM_LCD_IO_DMA => 0xff,
-            MEM_CARTRIDGE_ROM_START...MEM_CARTRIDGE_ROM_END =>
+            MEM_CARTRIDGE_ROM_START..=MEM_CARTRIDGE_ROM_END =>
                 self.cartridge.read(addr),
-            MEM_LCD_VRAM_START...MEM_LCD_VRAM_END => self.lcd.read(addr),
-            MEM_CARTRIDGE_RAM_START...MEM_CARTRIDGE_RAM_END =>
+            MEM_LCD_VRAM_START..=MEM_LCD_VRAM_END => self.lcd.read(addr),
+            MEM_CARTRIDGE_RAM_START..=MEM_CARTRIDGE_RAM_END =>
                 self.cartridge.read(addr),
-            0xc000...0xdfff => self.wram[(addr - 0xc000) as usize],
-            0xe000...0xfdff => self.wram[(addr - 0xe000) as usize],
-            MEM_LCD_OAM_START...MEM_LCD_OAM_END => self.lcd.read(addr),
-            0xff10...0xff27 => self.sound.read(addr),
-            MEM_LCD_IO_START...MEM_LCD_IO_END => self.lcd.read(addr),
-            0xff00...0xff0f | 0xff28...0xff7f | 0xffff => self.io.read(addr),
-            0xff80...0xfffe => self.hram[(addr - 0xff80) as usize],
+            0xc000..=0xdfff => self.wram[(addr - 0xc000) as usize],
+            0xe000..=0xfdff => self.wram[(addr - 0xe000) as usize],
+            MEM_LCD_OAM_START..=MEM_LCD_OAM_END => self.lcd.read(addr),
+            0xff10..=0xff27 => self.sound.read(addr),
+            MEM_LCD_IO_START..=MEM_LCD_IO_END => self.lcd.read(addr),
+            0xff00..=0xff0f | 0xff28..=0xff7f | 0xffff => self.io.read(addr),
+            0xff80..=0xfffe => self.hram[(addr - 0xff80) as usize],
             _ => {
                 trace!("Reading unmapped {:x}, just returning 0xff", addr);
                 0xff
@@ -282,18 +282,18 @@ impl Bus {
                     self.write(dst_addr + i, d);
                 }
             }
-            MEM_CARTRIDGE_ROM_START...MEM_CARTRIDGE_ROM_END =>
+            MEM_CARTRIDGE_ROM_START..=MEM_CARTRIDGE_ROM_END =>
                 self.cartridge.write(addr, value),
-            MEM_LCD_VRAM_START...MEM_LCD_VRAM_END => self.lcd.write(addr, value),
-            MEM_CARTRIDGE_RAM_START...MEM_CARTRIDGE_RAM_END =>
+            MEM_LCD_VRAM_START..=MEM_LCD_VRAM_END => self.lcd.write(addr, value),
+            MEM_CARTRIDGE_RAM_START..=MEM_CARTRIDGE_RAM_END =>
                 self.cartridge.write(addr, value),
-            0xc000...0xdfff => self.wram[(addr - 0xc000) as usize] = value,
-            0xe000...0xfdff => self.wram[(addr - 0xe000) as usize] = value,
-            MEM_LCD_OAM_START...MEM_LCD_OAM_END => self.lcd.write(addr, value),
-            0xff10...0xff27 => self.sound.write(addr, value),
-            MEM_LCD_IO_START...MEM_LCD_IO_END => self.lcd.write(addr, value),
-            0xff00...0xff0f | 0xff28...0xff7f | 0xffff => self.io.write(addr, value),
-            0xff80...0xfffe => self.hram[(addr - 0xff80) as usize] = value,
+            0xc000..=0xdfff => self.wram[(addr - 0xc000) as usize] = value,
+            0xe000..=0xfdff => self.wram[(addr - 0xe000) as usize] = value,
+            MEM_LCD_OAM_START..=MEM_LCD_OAM_END => self.lcd.write(addr, value),
+            0xff10..=0xff27 => self.sound.write(addr, value),
+            MEM_LCD_IO_START..=MEM_LCD_IO_END => self.lcd.write(addr, value),
+            0xff00..=0xff0f | 0xff28..=0xff7f | 0xffff => self.io.write(addr, value),
+            0xff80..=0xfffe => self.hram[(addr - 0xff80) as usize] = value,
             _ => trace!("NOT MAPPED FOR WRITE {:x} (value 0b{:05b})", addr, value),
         }
     }

@@ -118,13 +118,13 @@ impl Lcd {
             MEM_LCD_IO_OBP1 => self.obp1,
             MEM_LCD_IO_WY => self.wy,
             MEM_LCD_IO_WX => self.wx,
-            MEM_LCD_VRAM_TILE_DATA_START...MEM_LCD_VRAM_TILE_DATA_END => {
+            MEM_LCD_VRAM_TILE_DATA_START..=MEM_LCD_VRAM_TILE_DATA_END => {
                 self.read_vram_tile_data(addr)
             }
-            MEM_LCD_VRAM_TILE_MAP_START...MEM_LCD_VRAM_TILE_MAP_END => {
+            MEM_LCD_VRAM_TILE_MAP_START..=MEM_LCD_VRAM_TILE_MAP_END => {
                 self.vram_tile_table[(addr - MEM_LCD_VRAM_TILE_MAP_START) as usize]
             }
-            MEM_LCD_OAM_START...MEM_LCD_OAM_END => self.read_oam(addr),
+            MEM_LCD_OAM_START..=MEM_LCD_OAM_END => self.read_oam(addr),
             _ => 0xff,
         }
     }
@@ -142,13 +142,13 @@ impl Lcd {
             MEM_LCD_IO_OBP1 => self.obp1 = value,
             MEM_LCD_IO_WX => self.wx = value,
             MEM_LCD_IO_WY => self.wy = value,
-            MEM_LCD_VRAM_TILE_DATA_START...MEM_LCD_VRAM_TILE_DATA_END => {
+            MEM_LCD_VRAM_TILE_DATA_START..=MEM_LCD_VRAM_TILE_DATA_END => {
                 self.write_vram_tile_data(addr, value)
             }
-            MEM_LCD_VRAM_TILE_MAP_START...MEM_LCD_VRAM_TILE_MAP_END => {
+            MEM_LCD_VRAM_TILE_MAP_START..=MEM_LCD_VRAM_TILE_MAP_END => {
                 self.vram_tile_table[(addr - MEM_LCD_VRAM_TILE_MAP_START) as usize] = value
             }
-            MEM_LCD_OAM_START...MEM_LCD_OAM_END => self.write_oam(addr, value),
+            MEM_LCD_OAM_START..=MEM_LCD_OAM_END => self.write_oam(addr, value),
             _ => (),
         }
     }

@@ -1332,7 +1332,7 @@ impl Cpu {
                 trace!("inst: {:?}", instruction);
                 let inst_len = instruction.length();
                 self.pc_inc(inst_len as u16);
-                try!(self.execute_instruction(instruction));
+                self.execute_instruction(instruction)?;
                 self.add_cycles(timing as u64);
                 self.instruction_counter += 1;
             } else {

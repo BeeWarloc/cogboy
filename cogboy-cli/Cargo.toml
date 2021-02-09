@@ -2,6 +2,7 @@
 name = "cogboy-cli"
 version = "0.2.0"
 authors = ["BeeWarloc"]
+edition = "2018"
 
 [dependencies]
 cogboy-core = { path = "../cogboy-core" }

@@ -24,8 +24,8 @@ impl Sound {
 
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
-            0xff10...0xff14 => self.square1.read(addr.wrapping_sub(0xff10)),
-            0xff16...0xff19 => self.square2.read(addr.wrapping_sub(0xff15)),
+            0xff10..=0xff14 => self.square1.read(addr.wrapping_sub(0xff10)),
+            0xff16..=0xff19 => self.square2.read(addr.wrapping_sub(0xff15)),
             0xff25 => self.sound_output_select,
             _ => 0xff,
         }
@@ -33,8 +33,8 @@ impl Sound {
 
     pub fn write(&mut self, addr: u16, value: u8) {
         match addr {
-            0xff10...0xff14 => self.square1.write(addr.wrapping_sub(0xff10), value),
-            0xff16...0xff19 => self.square2.write(addr.wrapping_sub(0xff15), value),
+            0xff10..=0xff14 => self.square1.write(addr.wrapping_sub(0xff10), value),
+            0xff16..=0xff19 => self.square2.write(addr.wrapping_sub(0xff15), value),
             0xff25 => self.sound_output_select = value,
             _ => (),
         }
