@@ -2,3 +2,4 @@ target
 *.dump
 history.txt
 gameboy.state
+.DS_Store

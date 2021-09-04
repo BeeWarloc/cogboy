@@ -217,13 +217,15 @@ impl Gameboy {
                 Some(buffer) => {
                     // Snapshot here periodically for back stepping
                     if self.system.cycles_since_last_snapshot()
-                        > cogboy_core::constants::CPU_FREQ as u64
+                        > cogboy_core::constants::CPU_FREQ as u64 * 5
                     {
                         self.system.take_snapshot();
-                        println!(
-                            "NOCOMMIT!!!! SNAPSHOT SAVED!!! total size of snapshot store is {}KiB",
-                            (self.system.snapshots_size() as f64) / 1024.0
-                        );
+                        if self.system.snapshots.len() & 0xf == 0 {
+                            println!(
+                                "NOCOMMIT!!!! SNAPSHOT SAVED!!! total size of snapshot store is {}KiB",
+                                (self.system.snapshots_size() as f64) / 1024.0
+                            );    
+                        }
                     }
                     //self.history.push(self.cpu.clone().into());
                     let w = LCD_WIDTH + 256;
@@ -377,7 +379,7 @@ fn start_window_thread(message_tx: Sender<ControlMessage>, gfx_rx: Receiver<Vec<
         }
 
         window
-            .update_with_buffer(&buffer, LCD_WIDTH, LCD_HEIGHT)
+            .update_with_buffer(&buffer, width, height)
             .unwrap();
 
         if window.is_key_pressed(Key::P, KeyRepeat::No) {

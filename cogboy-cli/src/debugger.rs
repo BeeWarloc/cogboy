@@ -15,7 +15,7 @@ use std::io::Write as IoWrite;
 use super::command::{Breakpoint, Command};
 use super::ControlMessage;
 use super::Gameboy;
-use cogboy_core::cpu;
+use cogboy_core::{EventEntry, cpu};
 use cogboy_core::cpu::Cpu;
 use std::thread::JoinHandle;
 
@@ -54,6 +54,7 @@ pub enum DebugResponse {
     Breakpoints(Vec<Breakpoint>),
     Watchpoints(Vec<Breakpoint>),
     ReadMem(u16, Vec<u8>),
+    Events(Vec<EventEntry>),
 }
 
 pub enum DebugRequest {
@@ -67,6 +68,8 @@ pub enum DebugRequest {
     SetBreakpoints(Vec<Breakpoint>),
     ListBreakpoints,
     ReadMem(u16, u16),
+    GetEvents,
+    Reset,
 }
 
 impl DebugRequest {
@@ -209,6 +212,24 @@ impl DebugRequest {
                     vec.push(gameboy.system.cpu.bus.read(i));
                 }
                 DebugResponse::ReadMem(addr, vec)
+            },
+            DebugRequest::GetEvents => {
+                let mut events = Vec::new();
+                events.extend(gameboy.system.passed_events.iter().copied());
+                events.extend(gameboy.system.pending_events.iter().copied());
+                return DebugResponse::Events(events)
+            }
+            DebugRequest::Reset => {
+                let mut ctx = GameboyRunContext {
+                    break_cycle: u64::MAX,
+                    breakpoints: &HashSet::new(),
+                    watchpoints: &HashSet::new(),
+                    watchpoint_triggered: None,
+                };
+                gameboy
+                    .system
+                    .run_to_cycle(0, &mut ctx);
+                DebugResponse::Summary(SystemDebugSummary::new(gameboy))
             }
         }
     }
@@ -257,7 +278,7 @@ impl Debugger {
                 self.cursor = pc;
             }
             DebugResponse::Summary(summary) => {
-                println!("Regs are {:?}", summary);
+                println!("Regs are {:#?}", summary);
             }
             DebugResponse::Disassembly(dis) => {
                 println!("{}", dis);
@@ -295,6 +316,11 @@ impl Debugger {
                     }
                     println!("");
                     addr += x.len() as u16;
+                }
+            }
+            DebugResponse::Events(ref events) => {
+                for event in events {
+                    println!("{:?}", event)
                 }
             }
         }
@@ -392,6 +418,12 @@ impl Debugger {
             Command::Repeat => {
                 // Do nothing, as there's nothing to repeat
             }
+            Command::ListEvents => {
+                self.send_and_handle(DebugRequest::GetEvents).unwrap()
+            }
+            Command::Reset => {
+                self.send_and_handle(DebugRequest::Reset).unwrap()
+            }
             c => {
                 println!("Unhandled command {:?}", c)
             }
@@ -427,7 +459,7 @@ pub fn start(message_tx: Sender<ControlMessage>) -> JoinHandle<()> {
             let summary = debugger.get_summary().expect("Unable to get debug summary");
 
             let prompt = format!(
-                "(0x{:04x}) {} {} >",
+                "(0x{:04x}) {} {} > ",
                 debugger.cursor, summary.cycles, summary.instruction_counter
             );
             if let Ok(line) = rl.readline(prompt.as_str()) {

@@ -23,7 +23,10 @@ fn run_test_rom(path: &str) {
             break;
         }
     }
+    println!("{} output:", path);
+    println!("===========================");
     println!("{}", log);
+    println!("===========================");
     assert!(log.contains("Passed"));
 }
 
@@ -85,4 +88,9 @@ fn cpu_instr_11_op_a_hl() {
 #[test]
 fn instr_timing() {
     run_test_rom("tests/gb-test-roms/instr_timing/instr_timing.gb");
+}
+
+#[test]
+fn interrupt_time() {
+    run_test_rom("tests/gb-test-roms/interrupt_time/interrupt_time.gb");
 }

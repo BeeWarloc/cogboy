@@ -151,6 +151,13 @@ pub enum OpcodeOperand8 {
     RefUpperCOffset,
 }
 
+fn io_reg_addr_to_name(addr: u16) -> Option<&'static str> {
+    match addr {
+        0xff04 => Ok("TIMA"),
+        _ => None,
+    }
+}
+
 impl fmt::Display for OpcodeOperand8 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -168,7 +175,7 @@ impl fmt::Display for OpcodeOperand8 {
             &OpcodeOperand8::RefHLDec => write!(f, "(hl-)"),
             &OpcodeOperand8::RefImmAddr(addr) => write!(f, "(${:04x})", addr),
             &OpcodeOperand8::Imm(value) => write!(f, "${:02x}", value),
-            &OpcodeOperand8::RefUpperImmOffset(offset) => write!(f, "($ff00 + ${:02x})", offset),
+            &OpcodeOperand8::RefUpperImmOffset(offset) => write!(f, "(${:04x})", 0xff00 + offset as u16),
             &OpcodeOperand8::RefUpperCOffset => write!(f, "(0xff00 + c)"),
         }
     }

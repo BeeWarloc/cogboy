@@ -28,6 +28,8 @@ pub enum Command {
     RemoveBreakpoint(Breakpoint),
     Save,
     Load,
+    ListEvents,
+    Reset,
 
     Exit,
     Repeat,
@@ -49,6 +51,8 @@ named!(
     complete!(terminated!(
         alt_complete!(
             save_state
+                | reset
+                | list_events
                 | load_state
                 | step
                 | revstep
@@ -281,4 +285,15 @@ named!(
     load_state<Command>,
     map!(alt_complete!(tag!("load")), |_| Command::Load)
 );
+
+named!(
+    list_events<Command>,
+    map!(alt_complete!(tag!("events")), |_| Command::ListEvents)
+);
+
+named!(
+    reset<Command>,
+    map!(alt_complete!(tag!("reset")), |_| Command::Reset)
+);
+
 named!(repeat<Command>, value!(Command::Repeat));

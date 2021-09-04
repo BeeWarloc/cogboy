@@ -3,10 +3,10 @@ use std::mem;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sound {
-    // nr52
     square1: SquareGenerator,
     square2: SquareGenerator,
     sound_output_select: u8,
+    sound_on_off: u8,
     buffer: Vec<(i8, i8)>,
     seq_counter: u32,
 }
@@ -19,6 +19,7 @@ impl Sound {
             sound_output_select: 0,
             buffer: Vec::new(),
             seq_counter: 0,
+            sound_on_off: 1,
         }
     }
 
@@ -27,6 +28,7 @@ impl Sound {
             0xff10..=0xff14 => self.square1.read(addr.wrapping_sub(0xff10)),
             0xff16..=0xff19 => self.square2.read(addr.wrapping_sub(0xff15)),
             0xff25 => self.sound_output_select,
+            0xff26 => self.sound_on_off,
             _ => 0xff,
         }
     }
@@ -36,6 +38,7 @@ impl Sound {
             0xff10..=0xff14 => self.square1.write(addr.wrapping_sub(0xff10), value),
             0xff16..=0xff19 => self.square2.write(addr.wrapping_sub(0xff15), value),
             0xff25 => self.sound_output_select = value,
+            0xff26 => self.sound_on_off = (self.sound_on_off & 0x7f) | value & 0x80,
             _ => (),
         }
     }
@@ -53,6 +56,11 @@ impl Sound {
             self.square1.frame_sequencer_tick(step_number);
             self.square2.frame_sequencer_tick(step_number);
         }
+
+        self.sound_on_off = (self.sound_on_off & 0x80) |
+            if self.square1.internal_enabled { 1 } else { 0 } |
+            if self.square2.internal_enabled { 2 } else { 0 };
+
 
         self.seq_counter += cycles as u32;
 
