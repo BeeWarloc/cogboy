@@ -220,10 +220,6 @@ impl Gameboy {
                         > cogboy_core::constants::CPU_FREQ as u64
                     {
                         self.system.take_snapshot();
-                        println!(
-                            "NOCOMMIT!!!! SNAPSHOT SAVED!!! total size of snapshot store is {}KiB",
-                            (self.system.snapshots_size() as f64) / 1024.0
-                        );
                     }
                     //self.history.push(self.cpu.clone().into());
                     self.gfx_tx
