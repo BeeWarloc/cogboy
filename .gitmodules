@@ -1,0 +1,3 @@
+[submodule "cogboy-core/tests/gb-test-roms"]
+	path = cogboy-core/tests/gb-test-roms
+	url = ../gb-test-roms.git
